@@ -271,15 +271,14 @@ def run_all_tests():
     assert r_bad_tel.status_code == 400, f"Esperado 400 con teléfono inválido, obtenido {r_bad_tel.status_code}"
 
     server.registro_rate_limiter.requests.clear()
-    with server.get_db() as conn:
-        conn.cursor().execute("DELETE FROM conductores WHERE telefono = '50587779999' OR cedula = '001-150892-0004X'")
-        conn.commit()
+    test_phone = f"50587{secrets.randbelow(899999) + 100000}"
+    test_cedula = f"001-{secrets.randbelow(899999) + 100000:06d}-0004X"
 
     # 5. Registro exitoso -> 201
     r_reg_ok = client.post("/api/conductor/registro", json={
         "nombre": "Moisés Gadea",
-        "cedula": "001-150892-0004X",
-        "telefono": "50587779999",
+        "cedula": test_cedula,
+        "telefono": test_phone,
         "placa": "MY-9988",
         "reglas_aceptadas": True
     })
@@ -293,8 +292,8 @@ def run_all_tests():
     # 6. Intento de registro duplicado -> 409
     r_reg_dup = client.post("/api/conductor/registro", json={
         "nombre": "Moisés Gadea Clon",
-        "cedula": "001-150892-0004X",
-        "telefono": "50587779999",
+        "cedula": test_cedula,
+        "telefono": test_phone,
         "placa": "MY-9988",
         "reglas_aceptadas": True
     })
@@ -415,7 +414,7 @@ def run_all_tests():
     assert "Don Rigoberto" in html_text
     assert "50588883333" in html_text
     assert "Moisés Gadea" in html_text
-    assert "001-150892-0004X" in html_text
+    assert test_cedula in html_text
     assert "MY-9988" in html_text
     assert "Caja Negra" in html_text or "Bitácora" in html_text
 
@@ -425,7 +424,7 @@ def run_all_tests():
     caso_data = r_caso_json.get_json()
     assert caso_data["viaje"]["id"] == caja_trip_id
     assert caso_data["viaje"]["cliente_telefono"] == "50588883333"
-    assert caso_data["conductor"]["cedula"] == "001-150892-0004X"
+    assert caso_data["conductor"]["cedula"] == test_cedula
     assert caso_data["conductor"]["placa"] == "MY-9988"
     assert len(caso_data["bitacora"]) >= 4
     print("  -> PASÓ: Expediente de caso protegido (403/200), reúne solicitante, repartidor, cédula y bitácora.")
