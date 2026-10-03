@@ -8,9 +8,10 @@ import hmac
 import secrets
 import time
 import threading
+import re
 from collections import defaultdict
 from typing import List
-from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response, redirect
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
@@ -66,6 +67,20 @@ class InMemoryRateLimiter:
 
 viaje_rate_limiter = InMemoryRateLimiter(max_requests=5, window_sec=60)
 recarga_rate_limiter = InMemoryRateLimiter(max_requests=5, window_sec=60)
+registro_rate_limiter = InMemoryRateLimiter(max_requests=10, window_sec=60)
+
+def registrar_evento_bitacora(viaje_id: int, anterior: str, nuevo: str, actor: str = "sistema", detalles: str = ""):
+    """Registra de forma inmutable cada cambio de estado en la tabla bitacora_estados (caja negra de auditoría)."""
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO bitacora_estados (viaje_id, estado_anterior, estado_nuevo, actor, detalles)
+                VALUES (?, ?, ?, ?, ?)
+            """, (viaje_id, anterior, nuevo, actor, detalles))
+            conn.commit()
+    except Exception:
+        pass
 
 def purge_expired_trips():
     """Barre encargos en estado 'buscando' que superan el TTL y los marca como 'expirado'."""
@@ -73,6 +88,15 @@ def purge_expired_trips():
         ttl_sec = int(os.getenv("MANDADOS_VIAJE_TTL_SEC", "900"))
         with get_db() as conn:
             cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id FROM viajes
+                WHERE estado = 'buscando'
+                  AND (strftime('%s', 'now') - strftime('%s', created_at)) > ?
+            """, (ttl_sec,))
+            expired_ids = [r["id"] for r in cursor.fetchall()]
+            for x_id in expired_ids:
+                registrar_evento_bitacora(x_id, "buscando", "expirado", actor="sistema", detalles="TTL de búsqueda expirado")
+
             cursor.execute("""
                 UPDATE viajes
                 SET estado = 'expirado', updated_at = CURRENT_TIMESTAMP
@@ -136,9 +160,13 @@ def init_db():
             CREATE TABLE IF NOT EXISTS conductores (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT NOT NULL,
+                cedula TEXT,
                 telefono TEXT NOT NULL UNIQUE,
                 unidad TEXT NOT NULL,
+                placa TEXT,
                 driver_token TEXT UNIQUE,
+                suspendido INTEGER DEFAULT 0,
+                reglas_aceptadas INTEGER DEFAULT 0,
                 lat REAL DEFAULT 12.1364,
                 lng REAL DEFAULT -86.2514,
                 is_online INTEGER DEFAULT 0,
@@ -149,20 +177,23 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        try:
-            cursor.execute("ALTER TABLE conductores ADD COLUMN driver_token TEXT;")
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            cursor.execute("ALTER TABLE conductores ADD COLUMN is_demo INTEGER DEFAULT 0;")
-        except sqlite3.OperationalError:
-            pass
+        for col, col_def in [
+            ("cedula", "TEXT"),
+            ("placa", "TEXT"),
+            ("suspendido", "INTEGER DEFAULT 0"),
+            ("reglas_aceptadas", "INTEGER DEFAULT 0"),
+            ("driver_token", "TEXT"),
+            ("is_demo", "INTEGER DEFAULT 0")
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE conductores ADD COLUMN {col} {col_def};")
+            except sqlite3.OperationalError:
+                pass
 
         # Generar driver_token para repartidores existentes sin token
         cursor.execute("SELECT id FROM conductores WHERE driver_token IS NULL OR driver_token = ''")
         for row in cursor.fetchall():
-            cursor.execute("UPDATE conductores SET driver_token = ? WHERE id = ?", (secrets.token_hex(16), row["id"]))
+            cursor.execute("UPDATE conductores SET driver_token = ? WHERE id = ?", (f"MD-DRV-{secrets.token_hex(12)}", row["id"]))
         
         # 2. Mandados / Encargos (Viajes)
         cursor.execute("""
@@ -170,6 +201,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_token TEXT,
                 pasajero_nombre TEXT DEFAULT 'Cliente',
+                cliente_telefono TEXT DEFAULT '',
                 origen TEXT NOT NULL,
                 destino TEXT NOT NULL,
                 paquete_desc TEXT DEFAULT '',
@@ -183,15 +215,15 @@ def init_db():
                 FOREIGN KEY (conductor_id) REFERENCES conductores(id)
             )
         """)
-        try:
-            cursor.execute("ALTER TABLE viajes ADD COLUMN session_token TEXT;")
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            cursor.execute("ALTER TABLE viajes ADD COLUMN paquete_desc TEXT DEFAULT '';")
-        except sqlite3.OperationalError:
-            pass
+        for col, col_def in [
+            ("session_token", "TEXT"),
+            ("paquete_desc", "TEXT DEFAULT ''"),
+            ("cliente_telefono", "TEXT DEFAULT ''")
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE viajes ADD COLUMN {col} {col_def};")
+            except sqlite3.OperationalError:
+                pass
         
         # 3. Recargas Banpro
         cursor.execute("""
@@ -217,19 +249,33 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # 5. Bitácora de Estados (Caja Negra de Auditoría)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bitacora_estados (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                viaje_id INTEGER NOT NULL,
+                estado_anterior TEXT,
+                estado_nuevo TEXT NOT NULL,
+                actor TEXT DEFAULT 'sistema',
+                detalles TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (viaje_id) REFERENCES viajes(id)
+            )
+        """)
         
         # Insertar repartidores iniciales si la tabla está vacía Y MANDADOS_SEED_DEMO == "1"
         cursor.execute("SELECT COUNT(*) FROM conductores")
         if cursor.fetchone()[0] == 0 and os.getenv("MANDADOS_SEED_DEMO", "0") == "1":
             exp_date = (datetime.datetime.now() + datetime.timedelta(days=15)).strftime("%Y-%m-%d")
             initial_drivers = [
-                ("Carlos Ruiz", "50589130414", "Unidad #1 · Moto Reparto Express", secrets.token_hex(16), 12.1370, -86.2520, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
-                ("Kevin Morales", "50588881111", "Unidad #4 · Mensajería Ágil", secrets.token_hex(16), 12.1390, -86.2490, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
-                ("Pedro Dávila", "50588882222", "Unidad #9 · Moto Envíos", secrets.token_hex(16), 12.1340, -86.2540, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1)
+                ("Carlos Ruiz", "001-280590-0001A", "50589130414", "Unidad #1 · Moto Reparto Express", "MY-10293", f"MD-DRV-{secrets.token_hex(12)}", 0, 1, 12.1370, -86.2520, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
+                ("Kevin Morales", "001-140292-0002B", "50588881111", "Unidad #4 · Mensajería Ágil", "MY-40912", f"MD-DRV-{secrets.token_hex(12)}", 0, 1, 12.1390, -86.2490, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
+                ("Pedro Dávila", "001-091195-0003C", "50588882222", "Unidad #9 · Moto Envíos", "MY-99214", f"MD-DRV-{secrets.token_hex(12)}", 0, 1, 12.1340, -86.2540, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1)
             ]
             cursor.executemany("""
-                INSERT INTO conductores (nombre, telefono, unidad, driver_token, lat, lng, is_online, plan_activo, plan_nombre, plan_expira, is_demo)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO conductores (nombre, cedula, telefono, unidad, placa, driver_token, suspendido, reglas_aceptadas, lat, lng, is_online, plan_activo, plan_nombre, plan_expira, is_demo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, initial_drivers)
             
         conn.commit()
@@ -267,12 +313,18 @@ def get_authenticated_driver(expected_conductor_id=None):
             driver = cursor.fetchone()
             if not driver or not driver["driver_token"] or not hmac.compare_digest(token, driver["driver_token"]):
                 return None, (jsonify({"success": False, "error": "Acceso denegado: X-Driver-Token no coincide con el conductor"}), 403)
-            return dict(driver), None
+            driver_dict = dict(driver)
+            if driver_dict.get("suspendido") == 1:
+                return None, (jsonify({"success": False, "error": "Acceso denegado: Cuenta de repartidor suspendida por el operador"}), 403)
+            return driver_dict, None
         else:
             cursor.execute("SELECT * FROM conductores WHERE driver_token IS NOT NULL AND driver_token != ''")
             for d in cursor.fetchall():
                 if hmac.compare_digest(token, d["driver_token"]):
-                    return dict(d), None
+                    driver_dict = dict(d)
+                    if driver_dict.get("suspendido") == 1:
+                        return None, (jsonify({"success": False, "error": "Acceso denegado: Cuenta de repartidor suspendida por el operador"}), 403)
+                    return driver_dict, None
             return None, (jsonify({"success": False, "error": "Acceso denegado: X-Driver-Token inválido"}), 403)
 
 # =========================================================
@@ -410,10 +462,10 @@ def get_conductores():
         cursor = conn.cursor()
         
         if seed_demo:
-            query = "SELECT id, nombre, unidad, lat, lng, is_online, updated_at FROM conductores WHERE is_online = 1"
+            query = "SELECT id, nombre, unidad, lat, lng, is_online, updated_at FROM conductores WHERE is_online = 1 AND (suspendido IS NULL OR suspendido = 0)"
             cursor.execute(query)
         else:
-            query = "SELECT id, nombre, unidad, lat, lng, is_online, updated_at FROM conductores WHERE is_online = 1 AND is_demo = 0"
+            query = "SELECT id, nombre, unidad, lat, lng, is_online, updated_at FROM conductores WHERE is_online = 1 AND is_demo = 0 AND (suspendido IS NULL OR suspendido = 0)"
             cursor.execute(query)
             
         rows = cursor.fetchall()
@@ -431,6 +483,61 @@ def get_conductores():
         drivers.sort(key=lambda x: (x["distancia_km"] if x["distancia_km"] is not None else 999))
         
     return jsonify(drivers)
+
+@app.route("/api/conductor/registro", methods=["POST"])
+def registrar_conductor():
+    client_ip = get_client_ip()
+    if not registro_rate_limiter.is_allowed(client_ip):
+        return jsonify({"success": False, "error": "Demasiadas solicitudes de registro. Espere un momento (HTTP 429)"}), 429
+
+    data = request.get_json(silent=True) or {}
+    nombre = str(data.get("nombre", "")).strip()[:100]
+    cedula = str(data.get("cedula", "")).strip()[:30]
+    telefono = str(data.get("telefono", "")).strip()[:30]
+    placa = str(data.get("placa") or data.get("unidad", "")).strip()[:50]
+    reglas = data.get("reglas_aceptadas") in (True, 1, "1", "true", "True")
+
+    if not reglas:
+        return jsonify({"success": False, "error": "Debe aceptar las Reglas del Encargo para registrarse"}), 400
+
+    if len(nombre) < 3:
+        return jsonify({"success": False, "error": "El nombre completo es requerido (mínimo 3 caracteres)"}), 400
+
+    cedula_clean = re.sub(r'[\s\-]', '', cedula)
+    if not (re.match(r'^[0-9]{3}-?[0-9]{6}-?[0-9]{4}[A-Za-z]$', cedula) or (len(cedula_clean) >= 10 and cedula_clean.isalnum())):
+        return jsonify({"success": False, "error": "Número de cédula inválido. Formato esperado: 001-000000-0000A"}), 400
+
+    tel_clean = re.sub(r'[\s\-\+]', '', telefono)
+    if not (re.match(r'^(\+?505)?[2578]\d{7}$', telefono) or (len(tel_clean) >= 8 and tel_clean.isdigit())):
+        return jsonify({"success": False, "error": "Número de teléfono/WhatsApp inválido. Ingrese 8 dígitos válidos"}), 400
+
+    if len(placa) < 3:
+        return jsonify({"success": False, "error": "Número de placa o datos del vehículo requeridos"}), 400
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM conductores WHERE telefono = ? OR (cedula IS NOT NULL AND cedula != '' AND cedula = ?)", (telefono, cedula))
+        if cursor.fetchone():
+            return jsonify({"success": False, "error": "Ya existe un repartidor registrado con este teléfono o cédula"}), 409
+
+        driver_token = f"MD-DRV-{secrets.token_hex(12)}"
+        exp_date = (datetime.datetime.now() + datetime.timedelta(days=15)).strftime("%Y-%m-%d")
+        unidad_desc = f"Moto · Placa {placa}"
+
+        cursor.execute("""
+            INSERT INTO conductores (nombre, cedula, telefono, unidad, placa, driver_token, suspendido, reglas_aceptadas, lat, lng, is_online, plan_activo, plan_nombre, plan_expira, is_demo)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 1, 12.1364, -86.2514, 1, 1, 'Pionero (15 Días Gratis)', ?, 0)
+        """, (nombre, cedula, telefono, unidad_desc, placa, driver_token, exp_date))
+        conductor_id = cursor.lastrowid
+        conn.commit()
+
+    return jsonify({
+        "success": True,
+        "conductor_id": conductor_id,
+        "nombre": nombre,
+        "driver_token": driver_token,
+        "mensaje": "¡Registro completado! Guarda este PIN/Token de acceso; se muestra UNA SOLA VEZ."
+    }), 201
 
 @app.route("/api/conductor/posicion", methods=["POST"])
 def actualizar_posicion_conductor():
@@ -486,6 +593,7 @@ def solicitar_viaje():
 
     data = request.get_json(silent=True) or {}
     pasajero = str(data.get("pasajero_nombre") or data.get("cliente") or "Cliente Express")[:100]
+    cliente_telefono = str(data.get("cliente_telefono") or data.get("telefono") or data.get("whatsapp") or "")[:30]
     origen = str(data.get("origen", "Punto de Recogida"))[:150]
     destino = str(data.get("destino", "Punto de Entrega"))[:150]
     paquete = str(data.get("paquete_desc") or data.get("descripcion") or data.get("paquete") or "Mandado estándar")[:200]
@@ -516,11 +624,13 @@ def solicitar_viaje():
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO viajes (session_token, pasajero_nombre, origen, destino, paquete_desc, tarifa, lat_origen, lng_origen, estado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'buscando')
-        """, (session_token, pasajero, origen, destino, paquete, tarifa, lat_o, lng_o))
+            INSERT INTO viajes (session_token, pasajero_nombre, cliente_telefono, origen, destino, paquete_desc, tarifa, lat_origen, lng_origen, estado)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'buscando')
+        """, (session_token, pasajero, cliente_telefono, origen, destino, paquete, tarifa, lat_o, lng_o))
         viaje_id = cursor.lastrowid
         conn.commit()
+
+    registrar_evento_bitacora(viaje_id, None, "buscando", actor="solicitante", detalles=f"Mandado solicitado por {pasajero}")
 
     event_bus.publish("nuevo_viaje", {
         "viaje_id": viaje_id,
@@ -617,7 +727,7 @@ def cancelar_viaje(viaje_id=None):
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT session_token FROM viajes WHERE id = ?", (viaje_id,))
+        cursor.execute("SELECT session_token, estado FROM viajes WHERE id = ?", (viaje_id,))
         row = cursor.fetchone()
         if not row:
             return jsonify({"success": False, "error": "Mandado no encontrado"}), 404
@@ -626,6 +736,7 @@ def cancelar_viaje(viaje_id=None):
         if not reg_token or not hmac.compare_digest(token, reg_token):
             return jsonify({"success": False, "error": "UNAUTHORIZED: Token de sesión no coincide con el emisor del mandado"}), 403
 
+        prev_estado = row["estado"]
         cursor.execute("""
             UPDATE viajes 
             SET estado = 'cancelado', lat_origen = NULL, lng_origen = NULL, updated_at = CURRENT_TIMESTAMP
@@ -633,6 +744,7 @@ def cancelar_viaje(viaje_id=None):
         """, (viaje_id,))
         conn.commit()
 
+    registrar_evento_bitacora(viaje_id, prev_estado, "cancelado", actor="solicitante", detalles="Cancelado por emisor con session_token")
     event_bus.publish("viaje_cancelado", {"viaje_id": viaje_id})
     return jsonify({"success": True, "mensaje": "Mandado cancelado exitosamente"})
 
@@ -716,9 +828,11 @@ def aceptar_viaje(viaje_id):
         if cursor.rowcount == 0:
             return jsonify({"success": False, "error": "El mandado ya fue tomado por otro repartidor"}), 409
 
-        cursor.execute("SELECT id, nombre, telefono, unidad FROM conductores WHERE id = ?", (conductor_id,))
+        cursor.execute("SELECT id, nombre, telefono, unidad, placa FROM conductores WHERE id = ?", (conductor_id,))
         cond_row = cursor.fetchone()
         cond_data = dict(cond_row) if cond_row else {}
+
+    registrar_evento_bitacora(viaje_id, "buscando", "aceptado", actor="repartidor", detalles=f"Aceptado por {cond_data.get('nombre', 'Repartidor')} (ID {conductor_id})")
 
     event_bus.publish("viaje_aceptado", {
         "viaje_id": viaje_id,
@@ -730,6 +844,42 @@ def aceptar_viaje(viaje_id):
         "mensaje": "¡Mandado asignado con éxito! Dirígete al punto de recogida.",
         "conductor": cond_data
     })
+
+@app.route("/api/viajes/<int:viaje_id>/cambiar_estado", methods=["POST"])
+def cambiar_estado_viaje(viaje_id):
+    data = request.get_json(silent=True) or {}
+    nuevo_estado = str(data.get("estado", "")).strip().lower()
+    if nuevo_estado not in ("en_camino", "entregado", "cancelado"):
+        return jsonify({"success": False, "error": "Estado inválido. Debe ser: en_camino, entregado, o cancelado"}), 400
+
+    token_repartidor = request.headers.get("X-Driver-Token", "").strip()
+    token_sesion = (request.headers.get("X-Session-Token") or str(data.get("session_token", ""))).strip()
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM viajes WHERE id = ?", (viaje_id,))
+        v = cursor.fetchone()
+        if not v:
+            return jsonify({"success": False, "error": "Mandado no encontrado"}), 404
+
+        actor = "desconocido"
+        if token_repartidor:
+            driver, auth_err = get_authenticated_driver(v["conductor_id"])
+            if auth_err:
+                return auth_err
+            actor = f"repartidor:{driver['nombre']}"
+        elif token_sesion and v["session_token"] and hmac.compare_digest(token_sesion, v["session_token"]):
+            actor = "solicitante"
+        else:
+            return jsonify({"success": False, "error": "No autorizado para cambiar el estado de este mandado"}), 403
+
+        estado_ant = v["estado"]
+        cursor.execute("UPDATE viajes SET estado = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (nuevo_estado, viaje_id))
+        conn.commit()
+
+    registrar_evento_bitacora(viaje_id, estado_ant, nuevo_estado, actor=actor, detalles=f"Transición a {nuevo_estado}")
+    event_bus.publish("viaje_estado_cambiado", {"viaje_id": viaje_id, "estado": nuevo_estado})
+    return jsonify({"success": True, "estado": nuevo_estado, "mensaje": f"Estado actualizado a {nuevo_estado}"})
 
 # =========================================================
 # RUTAS API: RECARGAS BANPRO
@@ -789,10 +939,15 @@ ADMIN_HTML = """
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { padding: 10px; text-align: left; border-bottom: 1px solid #1e2d4a; font-size: 0.9rem; }
     th { color: #94a3b8; }
-    .badge { padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; }
+    .badge { padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; display: inline-block; }
     .badge-success { background: rgba(16,185,129,0.2); color: #10b981; }
     .badge-warning { background: rgba(245,158,11,0.2); color: #f59e0b; }
+    .badge-danger { background: rgba(244,63,94,0.2); color: #f43f5e; }
     .btn { display: inline-block; padding: 8px 16px; background: #0284c7; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600; margin-bottom: 15px; }
+    .btn-sm { padding: 5px 10px; font-size: 0.75rem; border-radius: 6px; text-decoration: none; font-weight: 700; display: inline-block; }
+    .btn-suspend { background: #f43f5e; color: #fff; }
+    .btn-activate { background: #10b981; color: #fff; }
+    .btn-dossier { background: #38bdf8; color: #090d16; }
   </style>
 </head>
 <body>
@@ -802,18 +957,32 @@ ADMIN_HTML = """
     <h2>Repartidores Registrados</h2>
     <table>
       <thead>
-        <tr><th>ID</th><th>Nombre</th><th>Teléfono</th><th>Unidad</th><th>Token (PIN)</th><th>Plan</th><th>Estado</th></tr>
+        <tr><th>ID</th><th>Nombre</th><th>Cédula</th><th>Teléfono</th><th>Placa/Unidad</th><th>Token (PIN)</th><th>Plan</th><th>Estado</th><th>Acción Operador</th></tr>
       </thead>
       <tbody>
         {% for c in conductores %}
         <tr>
           <td>{{ c.id }}</td>
-          <td>{{ c.nombre }}</td>
-          <td>{{ c.telefono }}</td>
-          <td>{{ c.unidad }}</td>
+          <td><strong>{{ c.nombre }}</strong></td>
+          <td><code>{{ c.cedula or '—' }}</code></td>
+          <td><a href="https://wa.me/{{ c.telefono }}" target="_blank" style="color: #38bdf8;">{{ c.telefono }}</a></td>
+          <td>{{ c.placa or c.unidad }}</td>
           <td><code>{{ c.driver_token }}</code></td>
           <td><span class="badge badge-success">{{ c.plan_nombre }}</span></td>
-          <td>{{ 'Online 🟢' if c.is_online else 'Offline ⚪' }}</td>
+          <td>
+            {% if c.suspendido == 1 %}
+              <span class="badge badge-danger">SUSPENDIDO ⛔</span>
+            {% else %}
+              {{ 'Online 🟢' if c.is_online else 'Offline ⚪' }}
+            {% endif %}
+          </td>
+          <td>
+            {% if c.suspendido == 1 %}
+              <a href="/admin/conductor/{{ c.id }}/suspender?key={{ admin_key }}&redirect=admin" class="btn-sm btn-activate">Reactivar</a>
+            {% else %}
+              <a href="/admin/conductor/{{ c.id }}/suspender?key={{ admin_key }}&redirect=admin" class="btn-sm btn-suspend">SUSPENDER</a>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -823,22 +992,221 @@ ADMIN_HTML = """
     <h2>Últimos Mandados Solicitados</h2>
     <table>
       <thead>
-        <tr><th>ID</th><th>Cliente</th><th>Recogida ➔ Entrega</th><th>Paquete</th><th>Tarifa</th><th>Estado</th></tr>
+        <tr><th>ID</th><th>Cliente</th><th>WhatsApp Remitente</th><th>Recogida ➔ Entrega</th><th>Paquete</th><th>Tarifa</th><th>Estado</th><th>Expediente</th></tr>
       </thead>
       <tbody>
         {% for v in viajes %}
         <tr>
           <td>#{{ v.id }}</td>
           <td>{{ v.pasajero_nombre }}</td>
+          <td>
+            {% if v.cliente_telefono %}
+              <a href="https://wa.me/{{ v.cliente_telefono }}" target="_blank" style="color: #38bdf8;">{{ v.cliente_telefono }}</a>
+            {% else %}
+              <span style="color: #64748b;">—</span>
+            {% endif %}
+          </td>
           <td>{{ v.origen }} ➔ {{ v.destino }}</td>
           <td>{{ v.paquete_desc or 'General' }}</td>
           <td>C$ {{ v.tarifa }}</td>
           <td><span class="badge badge-warning">{{ v.estado }}</span></td>
+          <td>
+            <a href="/admin/caso/{{ v.id }}?key={{ admin_key }}" class="btn-sm btn-dossier">📁 Ver Caso</a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+</body>
+</html>
+"""
+
+CASE_DOSSIER_HTML = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Expediente de Caso #{{ viaje.id }} · Mandados App 📦</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #f1f5f9; padding: 20px; line-height: 1.5; }
+    .container { max-width: 850px; margin: 0 auto; }
+    .card { background: #131c2e; padding: 20px; border-radius: 14px; margin-bottom: 18px; border: 1px solid #1e2d4a; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    h1 { color: #38bdf8; font-size: 1.4rem; margin: 0 0 5px 0; }
+    h2 { color: #0284c7; font-size: 1.05rem; border-bottom: 1px solid #1e2d4a; padding-bottom: 8px; margin-top: 0; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; }
+    .badge-buscando { background: rgba(56,189,248,0.2); color: #38bdf8; border: 1px solid #38bdf8; }
+    .badge-aceptado { background: rgba(245,158,11,0.2); color: #f59e0b; border: 1px solid #f59e0b; }
+    .badge-en_camino { background: rgba(168,85,247,0.2); color: #a855f7; border: 1px solid #a855f7; }
+    .badge-entregado { background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981; }
+    .badge-cancelado { background: rgba(244,63,94,0.2); color: #f43f5e; border: 1px solid #f43f5e; }
+    .badge-expirado { background: rgba(148,163,184,0.2); color: #94a3b8; border: 1px solid #94a3b8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 8px; }
+    .field-label { font-size: 0.72rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; display: block; margin-bottom: 2px; }
+    .field-value { font-size: 0.95rem; font-weight: 600; color: #fff; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #1e2d4a; font-size: 0.85rem; }
+    th { color: #94a3b8; background: #0f172a; }
+    .actions { display: flex; gap: 10px; margin-bottom: 15px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; text-decoration: none; cursor: pointer; border: none; }
+    .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .btn-copy { background: #10b981; color: #020617; }
+    .dossier-box { background: #0b1120; border: 1px dashed #334155; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 0.8rem; color: #cbd5e1; white-space: pre-wrap; margin-top: 15px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="actions">
+    <a href="/admin?key={{ admin_key }}" class="btn btn-secondary">← Volver al Panel</a>
+    <button onclick="copiarExpediente()" class="btn btn-copy">📋 Copiar Expediente Completo</button>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1>📦 Expediente Oficial de Mandado #{{ viaje.id }}</h1>
+        <p style="margin: 0; color: #94a3b8; font-size: 0.85rem;">Fecha y hora de solicitud: {{ viaje.created_at }}</p>
+      </div>
+      <span class="badge badge-{{ viaje.estado }}">{{ viaje.estado }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>1. Solicitante y Condiciones del Mandado</h2>
+    <div class="grid">
+      <div>
+        <span class="field-label">Nombre del Solicitante</span>
+        <span class="field-value">{{ viaje.pasajero_nombre or 'No especificado' }}</span>
+      </div>
+      <div>
+        <span class="field-label">WhatsApp Remitente</span>
+        <span class="field-value">
+          {% if viaje.cliente_telefono %}
+            <a href="https://wa.me/{{ viaje.cliente_telefono }}" target="_blank" style="color: #38bdf8;">{{ viaje.cliente_telefono }}</a>
+          {% else %}
+            <span style="color: #64748b;">No registrado</span>
+          {% endif %}
+        </span>
+      </div>
+      <div>
+        <span class="field-label">Tarifa Pactada</span>
+        <span class="field-value" style="color: #10b981;">C$ {{ viaje.tarifa }}</span>
+      </div>
+    </div>
+    <div class="grid" style="margin-top: 10px;">
+      <div>
+        <span class="field-label">Punto de Recogida (Origen)</span>
+        <span class="field-value">{{ viaje.origen }}</span>
+      </div>
+      <div>
+        <span class="field-label">Punto de Entrega (Destino)</span>
+        <span class="field-value">{{ viaje.destino }}</span>
+      </div>
+      <div>
+        <span class="field-label">Descripción del Paquete</span>
+        <span class="field-value">{{ viaje.paquete_desc or 'Mandado general' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Repartidor Asignado (Conductor)</h2>
+    {% if conductor %}
+    <div class="grid">
+      <div>
+        <span class="field-label">Nombre Completo</span>
+        <span class="field-value">{{ conductor.nombre }}</span>
+      </div>
+      <div>
+        <span class="field-label">N° de Cédula de Identidad</span>
+        <span class="field-value" style="color: #facc15;">{{ conductor.cedula or 'No registrada' }}</span>
+      </div>
+      <div>
+        <span class="field-label">WhatsApp / Teléfono</span>
+        <span class="field-value">
+          <a href="https://wa.me/{{ conductor.telefono }}" target="_blank" style="color: #38bdf8;">{{ conductor.telefono }}</a>
+        </span>
+      </div>
+      <div>
+        <span class="field-label">Placa / Vehículo</span>
+        <span class="field-value">{{ conductor.placa or conductor.unidad }}</span>
+      </div>
+      <div>
+        <span class="field-label">Estado de Cuenta</span>
+        <span class="field-value">
+          {% if conductor.suspendido == 1 %}
+            <span style="color: #f43f5e; font-weight: 800;">⛔ SUSPENDIDO</span>
+          {% else %}
+            <span style="color: #10b981; font-weight: 800;">ACTIVO</span>
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    {% else %}
+    <p style="color: #94a3b8; font-style: italic; margin: 5px 0;">No se asignó ningún repartidor a este mandado.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>3. Bitácora de Auditoría ("Caja Negra")</h2>
+    <p style="font-size: 0.8rem; color: #94a3b8; margin: 0 0 10px 0;">Registro inmutable cronológico de transiciones de estado para auditoría y resolución de disputas.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha / Hora</th>
+          <th>Estado Anterior</th>
+          <th>Estado Nuevo</th>
+          <th>Actor Responsable</th>
+          <th>Detalles / Observaciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in bitacora %}
+        <tr>
+          <td>{{ b.created_at }}</td>
+          <td><code>{{ b.estado_anterior or '—' }}</code></td>
+          <td><strong style="color: #38bdf8;">{{ b.estado_nuevo }}</strong></td>
+          <td>{{ b.actor }}</td>
+          <td>{{ b.detalles }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>4. Resumen Textual para Expediente / Evidencia</h2>
+    <div id="rawDossierText" class="dossier-box">=== EXPEDIENTE OFICIAL MANDADOS APP ===
+ID Mandado: #{{ viaje.id }}
+Fecha Solicitud: {{ viaje.created_at }}
+Estado Actual: {{ viaje.estado }}
+Tarifa: C$ {{ viaje.tarifa }}
+Origen: {{ viaje.origen }}
+Destino: {{ viaje.destino }}
+Paquete: {{ viaje.paquete_desc }}
+Remitente: {{ viaje.pasajero_nombre }} (Tel: {{ viaje.cliente_telefono or 'N/A' }})
+--- REPARTIDOR ASIGNADO ---
+Nombre: {{ conductor.nombre if conductor else 'N/A' }}
+Cédula: {{ conductor.cedula if conductor else 'N/A' }}
+Teléfono: {{ conductor.telefono if conductor else 'N/A' }}
+Placa/Unidad: {{ (conductor.placa or conductor.unidad) if conductor else 'N/A' }}
+--- BITÁCORA DE ESTADOS ---
+{% for b in bitacora %}[{{ b.created_at }}] {{ b.estado_anterior or 'INICIO' }} -> {{ b.estado_nuevo }} | Actor: {{ b.actor }} | {{ b.detalles }}
+{% endfor %}=======================================</div>
+  </div>
+</div>
+
+<script>
+function copiarExpediente() {
+  const text = document.getElementById('rawDossierText').innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('¡Expediente copiado al portapapeles!');
+  }).catch(() => {
+    alert('Expediente disponible en el recuadro para copiar.');
+  });
+}
+</script>
 </body>
 </html>
 """
@@ -857,11 +1225,86 @@ def admin_panel():
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM conductores")
+        cursor.execute("SELECT * FROM conductores ORDER BY id DESC")
         conductores = [dict(r) for r in cursor.fetchall()]
-        cursor.execute("SELECT * FROM viajes ORDER BY id DESC LIMIT 10")
+        cursor.execute("SELECT * FROM viajes ORDER BY id DESC LIMIT 20")
         viajes = [dict(r) for r in cursor.fetchall()]
-    return render_template_string(ADMIN_HTML, conductores=conductores, viajes=viajes)
+    return render_template_string(ADMIN_HTML, conductores=conductores, viajes=viajes, admin_key=provided_key)
+
+@app.route("/admin/conductor/<int:conductor_id>/suspender", methods=["GET", "POST"])
+def suspender_conductor(conductor_id):
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "").strip()
+    provided_key = (
+        request.args.get("key")
+        or request.headers.get("X-Admin-Key")
+        or request.headers.get("Authorization", "").replace("Bearer ", "")
+    ).strip()
+
+    if not admin_key or not provided_key or not hmac.compare_digest(provided_key, admin_key):
+        return jsonify({"success": False, "error": "Acceso denegado: Llave de administración requerida o inválida"}), 403
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nombre, suspendido FROM conductores WHERE id = ?", (conductor_id,))
+        cond = cursor.fetchone()
+        if not cond:
+            return jsonify({"success": False, "error": "Repartidor no encontrado"}), 404
+
+        nuevo_estado = 0 if cond["suspendido"] == 1 else 1
+        nuevo_online = 0 if nuevo_estado == 1 else 1
+        cursor.execute("UPDATE conductores SET suspendido = ?, is_online = ? WHERE id = ?", (nuevo_estado, nuevo_online, conductor_id))
+        conn.commit()
+
+    if request.args.get("redirect") == "admin":
+        return redirect(f"/admin?key={provided_key}")
+
+    return jsonify({
+        "success": True,
+        "conductor_id": conductor_id,
+        "suspendido": nuevo_estado,
+        "mensaje": f"Repartidor {cond['nombre']} {'SUSPENDIDO' if nuevo_estado == 1 else 'REACTIVADO'} con éxito"
+    })
+
+@app.route("/admin/caso/<int:viaje_id>", methods=["GET"])
+def admin_caso(viaje_id):
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "").strip()
+    provided_key = (
+        request.args.get("key")
+        or request.headers.get("X-Admin-Key")
+        or request.headers.get("Authorization", "").replace("Bearer ", "")
+    ).strip()
+
+    if not admin_key or not provided_key or not hmac.compare_digest(provided_key, admin_key):
+        return jsonify({"success": False, "error": "Acceso denegado: Llave de administración requerida o inválida"}), 403
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM viajes WHERE id = ?", (viaje_id,))
+        viaje_row = cursor.fetchone()
+        if not viaje_row:
+            return jsonify({"success": False, "error": "Mandado no encontrado"}), 404
+
+        viaje = dict(viaje_row)
+
+        conductor = None
+        if viaje.get("conductor_id"):
+            cursor.execute("SELECT id, nombre, cedula, telefono, unidad, placa, suspendido FROM conductores WHERE id = ?", (viaje["conductor_id"],))
+            cond_row = cursor.fetchone()
+            if cond_row:
+                conductor = dict(cond_row)
+
+        cursor.execute("SELECT * FROM bitacora_estados WHERE viaje_id = ? ORDER BY id ASC", (viaje_id,))
+        bitacora = [dict(r) for r in cursor.fetchall()]
+
+    if request.is_json or request.args.get("format") == "json" or request.headers.get("Accept") == "application/json":
+        return jsonify({
+            "success": True,
+            "viaje": viaje,
+            "conductor": conductor,
+            "bitacora": bitacora
+        })
+
+    return render_template_string(CASE_DOSSIER_HTML, viaje=viaje, conductor=conductor, bitacora=bitacora, admin_key=provided_key)
 
 if __name__ == "__main__":
     host_bind = os.getenv("HOST", "0.0.0.0")
