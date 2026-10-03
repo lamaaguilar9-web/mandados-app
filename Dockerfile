@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+ENV HOST=0.0.0.0
+ENV PORT=5054
+EXPOSE 5054
+CMD ["python", "server.py"]
