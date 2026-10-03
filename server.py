@@ -865,6 +865,8 @@ def admin_panel():
 
 if __name__ == "__main__":
     host_bind = os.getenv("HOST", "0.0.0.0")
+    if os.path.exists("/.dockerenv") or os.getenv("CONTAINER"):
+        host_bind = "0.0.0.0"
     port_bind = int(os.getenv("PORT", "5058"))
     print("==================================================")
     print(f"[OK] MANDADOS ENGINE ACTIVO en http://{host_bind}:{port_bind}")

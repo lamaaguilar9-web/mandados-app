@@ -17,11 +17,11 @@ ssh root@2.25.121.124 "nginx -t && systemctl reload nginx"
 
 echo.
 echo [3/4] Reconstruyendo y levantando contenedor mandados_app en puerto 5058...
-ssh root@2.25.121.124 "cd /root/mandados_app && if [ ! -f .env ]; then cp .env.example .env; fi && docker compose up -d --build"
+ssh root@2.25.121.124 "cd /root/mandados_app && if [ ! -f .env ]; then cp .env.example .env; fi && sed -i 's/HOST=127.0.0.1/HOST=0.0.0.0/g' .env && docker compose down 2>/dev/null; if [ -d mandados.db ]; then rm -rf mandados.db; fi; touch mandados.db && docker compose up -d --build --force-recreate"
 
 echo.
 echo [4/4] Verificando sondas en vivo (Mandados 5058 y Caponera 5054)...
-timeout /t 3 /nobreak >nul
+timeout /t 5 /nobreak >nul
 echo --- Sonda Mandados App (/api/version):
 ssh -i C:\Users\luis\.ssh\id_auditor_sentinel -o BatchMode=yes auditor@2.25.121.124 "curl -s http://127.0.0.1:5058/api/version"
 echo.
@@ -30,6 +30,9 @@ ssh -i C:\Users\luis\.ssh\id_auditor_sentinel -o BatchMode=yes auditor@2.25.121.
 echo.
 echo --- Sonda Caponera App (/api/version intacta):
 ssh -i C:\Users\luis\.ssh\id_auditor_sentinel -o BatchMode=yes auditor@2.25.121.124 "curl -s http://127.0.0.1:5054/api/version"
+echo.
+echo --- Diagnostico de contenedor Docker mandados_app:
+ssh root@2.25.121.124 "docker ps -f name=mandados_app && echo --- Ultimos logs: && docker logs --tail 15 mandados_app"
 
 echo.
 echo ===============================================================================
