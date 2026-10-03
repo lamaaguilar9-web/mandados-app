@@ -1,10 +1,11 @@
-const CACHE_NAME = 'caponera-v1';
+const CACHE_NAME = 'mandados-v1.0.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/manifest.json',
   '/app.js',
+  '/privacidad.html',
   '/icon-192.png',
   '/apple-touch-icon.png'
 ];

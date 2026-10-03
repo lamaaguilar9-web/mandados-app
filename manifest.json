@@ -1,6 +1,7 @@
 {
-  "short_name": "Caponera",
-  "name": "Caponera App",
+  "short_name": "Mandados",
+  "name": "Mandados App",
+  "description": "Plataforma comunitaria de envíos rápidos, mandados y compras locales",
   "icons": [
     {
       "src": "icon-192.png",
@@ -17,6 +18,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#090d16",
+  "theme_color": "#0284c7",
   "background_color": "#090d16"
 }

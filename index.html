@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#f59e0b" />
+  <meta name="theme-color" content="#0284c7" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="icon-192.png" />
-  <title>Caponera App 🛺 | Transporte y Mandados en Masaya</title>
+  <title>Mandados App 📦 | Envíos y Mandados Express</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -44,29 +44,29 @@
   <div class="w-full max-w-md bg-slate-950 flex flex-col min-h-screen border-x border-slate-800 shadow-2xl relative">
 
     <!-- Header Principal -->
-    <header class="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 p-3.5 text-slate-950 flex justify-between items-center sticky top-0 z-40 shadow-lg">
+    <header class="bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 p-3.5 text-slate-950 flex justify-between items-center sticky top-0 z-40 shadow-lg">
       <div class="flex items-center gap-2">
-        <div class="w-10 h-10 bg-slate-950 text-amber-400 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-amber-400/30">
-          <i class="fa-solid fa-motorcycle"></i>
+        <div class="w-10 h-10 bg-slate-950 text-sky-400 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-sky-400/30">
+          <i class="fa-solid fa-box-open"></i>
         </div>
         <div>
           <div class="flex items-center gap-1.5">
-            <h1 class="font-black text-lg leading-tight tracking-tight">Caponera<span class="text-white">App</span></h1>
-            <span class="text-[9px] bg-slate-950 text-amber-300 font-extrabold px-1.5 py-0.5 rounded-md">PRO</span>
+            <h1 class="font-black text-lg leading-tight tracking-tight text-slate-950">Mandados<span class="text-white">App</span> 📦</h1>
+            <span class="text-[9px] bg-slate-950 text-sky-300 font-extrabold px-1.5 py-0.5 rounded-md">EXPRESS</span>
           </div>
           <p class="text-[10px] font-bold text-slate-900 flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span> Red <span class="city-name-label">Masaya</span> &bull; En Vivo
+            <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span> Red de Repartos &bull; En Vivo
           </p>
         </div>
       </div>
 
-      <!-- Selector de Rol: Pasajero / Caponero -->
+      <!-- Selector de Rol: Cliente / Repartidor -->
       <div class="bg-slate-950/25 p-1 rounded-2xl flex text-xs font-black border border-slate-950/15">
-        <button id="btnRolePassenger" onclick="cambiarRol('pasajero')" class="px-3 py-1.5 rounded-xl bg-slate-950 text-amber-400 shadow-md transition-all">
-          <i class="fa-solid fa-user text-[11px] mr-1"></i>Pasajero
+        <button id="btnRolePassenger" onclick="cambiarRol('pasajero')" class="px-3 py-1.5 rounded-xl bg-slate-950 text-sky-400 shadow-md transition-all">
+          <i class="fa-solid fa-user text-[11px] mr-1"></i>Cliente
         </button>
         <button id="btnRoleDriver" onclick="cambiarRol('conductor')" class="px-3 py-1.5 rounded-xl text-slate-950 hover:text-white transition-all">
-          <i class="fa-solid fa-id-card text-[11px] mr-1"></i>Caponero
+          <i class="fa-solid fa-motorcycle text-[11px] mr-1"></i>Repartidor
         </button>
       </div>
     </header>
@@ -464,7 +464,7 @@
             </span>
             <div>
               <h3 class="font-black text-sm text-white">Privacidad y Legal</h3>
-              <p class="text-[10px] text-slate-400 font-mono">Protección de Datos &bull; Caponera App</p>
+              <p class="text-[10px] text-slate-400 font-mono">Protección de Datos &bull; Mandados App</p>
             </div>
           </div>
           <button onclick="ocultarPrivacidad()" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs">
@@ -483,11 +483,11 @@
           </div>
 
           <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
-            <h4 class="font-bold text-amber-400 flex items-center gap-1.5 mb-1 text-[11px]">
-              <i class="fa-solid fa-user-check"></i> 2. Nombre de Referencia y Coordinación
+            <h4 class="font-bold text-sky-400 flex items-center gap-1.5 mb-1 text-[11px]">
+              <i class="fa-solid fa-user-check"></i> 2. Nombre de Referencia y Encargo
             </h4>
             <p class="text-[11px] text-slate-400">
-              Al pasajero únicamente se le solicita un nombre de referencia para identificar el viaje. <strong>Jamás vendemos ni compartimos tus datos</strong> con agencias de publicidad o redes comerciales.
+              Al solicitante únicamente se le solicita un nombre de referencia para coordinar el encargo. <strong>Jamás vendemos ni compartimos tus datos</strong> con agencias de publicidad o redes comerciales.
             </p>
           </div>
 
@@ -496,7 +496,7 @@
               <i class="fa-solid fa-handshake"></i> 3. Naturaleza Comunitaria y Exoneración
             </h4>
             <p class="text-[11px] text-slate-400">
-              Caponera App es una herramienta tecnológica comunitaria de enlace directo entre usuarios y conductores locales independientes. No somos empresa de transporte ni cobramos comisiones obligatorias; los acuerdos y tarifas son pactados libremente entre las partes.
+              Mandados App es una herramienta tecnológica comunitaria de enlace directo entre usuarios y repartidores locales independientes. No somos empresa de transporte ni cobramos comisiones obligatorias; los acuerdos y tarifas son pactados libremente entre las partes.
             </p>
           </div>
 
@@ -505,12 +505,12 @@
               <i class="fa-solid fa-scale-balanced"></i> 4. Legislación de Protección de Datos
             </h4>
             <p class="text-[11px] text-slate-400">
-              Garantizamos el pleno ejercicio de tus derechos de acceso, rectificación y eliminación de datos conforme a la legislación aplicable en protección de datos personales. Puedes consultar la política completa en <a href="/privacidad.html" target="_blank" class="text-amber-400 underline">privacidad.html</a>.
+              Garantizamos el pleno ejercicio de tus derechos de acceso, rectificación y eliminación de datos conforme a la legislación aplicable en protección de datos personales. Puedes consultar la política completa en <a href="/privacidad.html" target="_blank" class="text-sky-400 underline">privacidad.html</a>.
             </p>
           </div>
         </div>
 
-        <button onclick="ocultarPrivacidad()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
+        <button onclick="ocultarPrivacidad()" class="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
           Entendido y Acepto
         </button>
       </div>
