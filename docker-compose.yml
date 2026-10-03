@@ -1,12 +1,12 @@
 services:
-  caponera-app:
+  mandados-app:
     build: .
-    container_name: caponera_app
+    container_name: mandados_app
     restart: unless-stopped
     environment:
       - HOST=0.0.0.0
-      - PORT=5054
+      - PORT=5058
     ports:
-      - "127.0.0.1:5054:5054"
+      - "127.0.0.1:5058:5058"
     volumes:
-      - ./caponera.db:/app/caponera.db
+      - ./mandados.db:/app/mandados.db

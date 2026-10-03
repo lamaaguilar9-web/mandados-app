@@ -1,18 +1,19 @@
-# Caponera App 🛺
+# Mandados App 📦
 
-Plataforma comunitaria Progressive Web App (PWA) de despacho y enlace directo para transporte liviano (mototaxis / caponeras) y mandados locales.
+Plataforma comunitaria Progressive Web App (PWA) de despacho y coordinación ágil para envíos, compras locales y mandados express atendidos por mototaxistas y repartidores independientes.
 
-Diseñada con arquitectura ligera y desacoplada: Frontend Vanilla PWA (cero dependencias de framework, sonido sintético vía Web Audio API, mapas Leaflet) con Backend Flask impulsado por un bus reactivo de Server-Sent Events (SSE) y almacenamiento transaccional SQLite en modo WAL.
+Servicio desacoplado e independiente de **Caponera App** (transporte exclusivo de pasajeros), con base de datos propia (`mandados.db`), motor aislado en el puerto **`5058`**, y llave de administración dedicada (`MANDADOS_ADMIN_KEY`).
 
 ---
 
 ## 1. Arquitectura del Contenedor Docker
 
-La aplicación está completamente dockerizada para despliegues reproducibles e independientes:
+La aplicación está dockerizada para despliegues reproducibles, autónomos y con aislamiento perimetral estricto:
 
 - **Imagen Base:** `python:3.11-slim`
-- **Puerto Interno y Loopback:** `5054` (mapeado estrictamente como `127.0.0.1:5054:5054` en el host).
-- **Aislamiento de Red:** Siguiendo la regla de seguridad de Sentinel Fleet, el contenedor se amarra exclusivamente a loopback local (`127.0.0.1`), impidiendo exposición directa a internet. El tráfico público ingresa mediante el reverse proxy seguro de Nginx en `caponera.sentinelfleet.tech` con terminación TLS.
+- **Puerto Interno y Loopback:** `5058` (mapeado estrictamente como `127.0.0.1:5058:5058` en el host).
+- **Asignación de Puerto:** Seleccionado el puerto `5058` dado que el puerto sugerido `5057` se encuentra asignado al servicio `defi-ai-circuit-breaker`, preservando la regla de no colisión.
+- **Aislamiento de Red (Layer 1 Perimeter):** Siguiendo las directrices de Sentinel Fleet, el contenedor se amarra exclusivamente a loopback local (`127.0.0.1`), impidiendo exposición directa a internet. El tráfico público ingresa mediante el reverse proxy seguro de Nginx.
 
 ### Arranque del Contenedor
 
@@ -26,107 +27,61 @@ docker compose up -d --build
 docker compose ps
 
 # Ver registros en tiempo real
-docker compose logs -f caponera-app
+docker compose logs -f mandados-app
 ```
 
 ---
 
 ## 2. Variables de Entorno y Configuración (.env)
 
-El servicio lee sus parámetros del entorno operativo. Siguiendo la política de seguridad estricta:
+El servicio lee sus parámetros del entorno operativo bajo regla estricta de higiene:
 
-> **REGLA DE HIGIENE:** Cero secretos, tokens o credenciales en el repositorio de Git ni en las imágenes de Docker. Cualquier variable sensible reside exclusivamente en el archivo `/root/caponera_app/.env` en el servidor VPS con permisos restrictivos `chmod 600`.
+> **REGLA DE HIGIENE:** Cero secretos, tokens o credenciales en el repositorio de Git ni en las imágenes de Docker. Las variables sensibles residen exclusivamente en `/root/mandados_app/.env` en el servidor VPS con permisos restrictivos `chmod 600`.
 
 ### Variables Soportadas
 
 | Variable | Tipo | Valor por Defecto | Descripción |
 | :--- | :--- | :--- | :--- |
-| `HOST` | String | `127.0.0.1` | Dirección de enlace HTTP del servidor Python Flask. |
-| `PORT` | Int | `5054` | Puerto TCP de escucha del servidor. |
-| `DEBUG` | Bool | `False` | Modo de depuración de Flask (desactivado en producción). |
+| `MANDADOS_ADMIN_KEY` | String | *(Requerida en prod)* | Llave secreta obligatoria para acceso al panel `/admin`. |
+| `MANDADOS_SEED_DEMO` | Int (0/1) | `0` | Modo semilla demo (`1` genera repartidores de prueba; `0` producción). |
+| `MANDADOS_VIAJE_TTL_SEC`| Int | `900` | Tiempo de vida de un encargo buscando antes de expirar (15 min). |
+| `MANDADOS_CIUDAD` | String | `Masaya` | Ciudad operativa de referencia. |
+| `MANDADOS_TARIFA_MIN` | Float | `20.0` | Tarifa mínima permitida (C$). |
+| `MANDADOS_TARIFA_MAX` | Float | `300.0` | Tarifa máxima permitida (C$). |
+| `HOST` | String | `127.0.0.1` | Dirección de enlace local. |
+| `PORT` | Int | `5058` | Puerto TCP de escucha del servidor. |
 
 ---
 
-## 3. Persistencia de Datos y Política de Respaldos
+## 3. Persistencia de Datos y Base de Datos
 
-### Persistencia en SQLite (Modo WAL)
-Los datos transaccionales se almacenan en un archivo SQLite local (`caponera.db`), montado como volumen bind en `docker-compose.yml`:
-
-```yaml
-volumes:
-  - ./caponera.db:/app/caponera.db
-```
-
-El motor de base de datos activa automáticamente las siguientes directivas de alto rendimiento y concurrencia:
-- `PRAGMA journal_mode=WAL;` (Write-Ahead Logging para lecturas no bloqueantes durante escrituras concurrentes).
-- `PRAGMA foreign_keys=ON;` (Integridad referencial activa).
-- `PRAGMA busy_timeout=5000;` (Resiliencia ante bloqueos transitorios).
+### SQLite en Modo WAL (`mandados.db`)
+Los datos transaccionales residen de forma independiente en `mandados.db` (sin interactuar con `caponera.db`), con directivas de alta concurrencia activas:
+- `PRAGMA journal_mode=WAL;`
+- `PRAGMA foreign_keys=ON;`
+- `PRAGMA busy_timeout=5000;`
 
 ### Esquema de Tablas
-1. **`conductores`**: Registro de conductores, unidades, coordenadas GPS de última posición, estado de conexión (`is_online`) y planes de membresía activa.
-2. **`viajes`**: Solicitudes de carreras, token de sesión temporal, origen/destino, tarifa acordada, estado del viaje (`buscando`, `asignado`, `completado`, `cancelado`) y conductor asignado.
-3. **`recargas_banpro`**: Registro de pagos y transferencias bancarias locales para renovación de planes.
-4. **`visitas`**: Registro analítico interno de IPs anonimizadas, referrers y User-Agents.
-
-### Procedimiento de Respaldo en Caliente (Hot Backup)
-Dado que la base de datos opera en modo WAL, un respaldo seguro y consistente sin detener el contenedor se ejecuta utilizando la API de respaldo de SQLite:
-
-```bash
-# Ejecutar copia en caliente desde el host
-sqlite3 caponera.db ".backup 'backups/caponera_backup_$(date +%Y%m%d_%H%M%S).db'"
-
-# O dentro del contenedor Docker:
-docker exec caponera_app sqlite3 /app/caponera.db ".backup '/app/caponera_hotbackup.db'"
-```
+1. **`conductores`**: Registro de repartidores/mototaxis, coordenadas, estado online y planes activos.
+2. **`viajes`**: Solicitudes de mandados con punto de recogida, punto de entrega, descripción del paquete (`paquete_desc`), tarifa acordada, estado (`buscando`, `aceptado`, `cancelado`, `expirado`), y `session_token` criptográfico.
+3. **`recargas_banpro`**: Registro de comprobantes de pago de repartidores.
+4. **`visitas`**: Registro analítico interno de IPs anonimizadas y user agents.
 
 ---
 
-## 4. Inventario de Parámetros Hardcodeados
+## 4. Hardening y Seguridad Heredada (Ronda 1 + Ronda 2)
 
-*(Documentados para futura parametrización / multi-inquilino según directriz de auditoría GLM, conservando código actual sin modificaciones).*
-
-### A. Ubicaciones y Coordenadas Geográficas
-- **Ciudad Principal de Despliegue:** Masaya / Granada / Managua, Nicaragua.
-- **Coordenadas de Referencia por Defecto (`server.py` y `app.js`):** `lat: 12.1364`, `lng: -86.2514` (Coordenadas céntricas Managua/Masaya para centrado de mapa Leaflet).
-- **Zonas de Publicidad:** Masaya Centro, San Jerónimo, Mercado Municipal.
-
-### B. Títulos y Marca
-- **Título en HTML (`index.html`):** `Caponera App 🛺 | Transporte y Mandados en Masaya`
-- **Nombre de Unidad Pionera:** `Unidad #7 · Caponera Express`
-- **Términos Legales:** Referencia expresa a `Ley 787 · Caponera App Masaya` (Ley de Protección de Datos Personales de Nicaragua).
-
-### C. Teléfonos y Enlaces de Contacto WhatsApp
-- **Teléfono de Despacho Central / Administrador (`app.js` / `server.py`):** `50589130414` (`+505 8913-0414`).
-- **Línea Banpro / Pagos (`BANPRO_WHATSAPP_PHONE` en `app.js`):** `50589130414`.
-- **Conductores Semilla Iniciales (`server.py`):**
-  - `José Ramón`: `50589130414` (Unidad #7 · Caponera Express, Coords: `12.1370, -86.2520`).
-  - `Alex Mendoza`: `50588881111` (Caponera #14, Coords: `12.1390, -86.2490`).
-  - `María González`: `50588882222` (Moto Taxi #09, Coords: `12.1340, -86.2540`).
-- **Anunciantes Locales Semilla (`index.html`):**
-  - Polarizados & Focos: `50589130414`.
-  - Vigorón Mixto & Fritanga (Doña Tania): `50588889999`.
-  - Taller de Mototaxis San Jerónimo: `tel:50588887777`.
-  - Farmacia San Jerónimo: `50588886666`.
-
-### D. Tarifas y Moneda
-- **Moneda:** Córdobas Nicaragüenses (`C$`).
-- **Selector de Fares Rápidos (`app.js`):** `20 + idx * 5` (`C$ 20.00`, `C$ 25.00`, `C$ 30.00`).
-- **Tarifa Base Pre-pactada (`server.py` / `app.js`):** `C$ 35.00`.
-- **Costo de Pauta Publicitaria Comunitaria:** `C$ 150` mensuales.
+Mandados App hereda el 100% de los controles auditados y verificados:
+1. **Control Anti-IDOR con `session_token`:** Consulta de estado y cancelación de mandados exigen el token emitido exclusivamente al cliente que originó el pedido.
+2. **Mitigación Anti-Spoofing en Rate Limiting (P6):** Detección de IP mediante cabecera confiable `X-Real-IP` o último hop verificado en `X-Forwarded-For`, evitando falsificación de direcciones IP. Límite estricto de 5 solicitudes/minuto (HTTP 429).
+3. **Autenticación en Tiempo Constante:** Verificación de `X-Driver-Token` y `MANDADOS_ADMIN_KEY` mediante `hmac.compare_digest`.
+4. **Asignación Atómica en BD:** Cláusula `UPDATE viajes SET estado='aceptado', conductor_id=? WHERE id=? AND estado='buscando'` previniendo colisiones concurrentes entre repartidores.
+5. **Privacidad Estricta (Zero-PII):** Teléfonos y datos personales removidos de endpoints públicos (`/api/conductores/activos` y `/api/viajes/disponibles`).
+6. **Transparencia en Términos y Privacidad:** Declaración honesta de servidores en Houston, Texas, EE.UU., terceros técnicos necesarios (Carto, Leaflet, Tailwind, Cloudflare), retención sujeta a solicitud por WhatsApp, enlace oficial a `asamblea.gob.ni`, y aviso técnico transparente sobre conexión HTTP.
 
 ---
 
 ## 5. Control de Despliegue y Pruebas
 
-- **Script de Despliegue Rápido al VPS:** `DESPLEGAR_CAPONERA_VPS.bat` (despliegue seguro vía SCP + restart condicional de Docker).
-- **Pruebas de Despacho:** `test_dispatch.py` (simulación de eventos y verificación de latencia de entrega SSE).
-- **Panel Administrativo:** Disponible localmente en `/admin` con vista de conductores activos y viajes solicitados.
-
----
-
-## 6. Modelo de Amenazas y Riesgos Residuales Acotados (Auditoría GLM CA-6)
-
-- **Identificadores Secuenciales de Viajes:** Los IDs de viajes en SQLite son enteros secuenciales incrementales (`AUTOINCREMENT`). El riesgo residual de adivinación, scraping o manipulación de estado queda acotado y neutralizado mediante:
-  1. **Control de Autorización Estricto por `session_token`:** Cualquier solicitud de consulta de estado (`/api/viajes/<id>/estado`) o cancelación (`/api/viajes/<id>/cancelar`) exige el `session_token` emitido exclusivamente al creador del viaje. Solicitudes sin token o con token ajeno son rechazadas con HTTP 403 (CA-3 y CA-5).
-  2. **Rate-Limiting por IP:** La API de creación de viajes y recargas implementa un límite de peticiones en memoria por dirección IP (máximo 5 solicitudes/minuto; peticiones adicionales reciben HTTP 429), impidiendo ataques automatizados de denegación de servicio o saturación (CA-6).
-  3. **Purga Automática por TTL (Time-To-Live):** Las carreras en estado `buscando` que no son tomadas dentro de su ventana de validez (configurable mediante `CAPONERA_VIAJE_TTL_SEC`, por defecto 900 segundos / 15 minutos) son marcadas automáticamente como `expirado` en cada petición o barrido periódico, evitando la acumulación de viajes huérfanos (CA-6).
+- **Suite de Pruebas Automatizadas:** `python test_mandados.py` (10/10 criterios verificados).
+- **Script de Despliegue al VPS:** `DESPLEGAR_MANDADOS_VPS.bat` (sincronización vía SCP + Docker compose rebuild en puerto 5058).
