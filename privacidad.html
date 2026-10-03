@@ -104,15 +104,16 @@
         </h2>
         <div class="space-y-2">
           <p>
-            Para procesar y coordinar los encargos y envíos solicitados, el sistema opera con los siguientes criterios exactos:
+            Para procesar y coordinar los encargos y envíos solicitados con total seguridad operativa, el sistema opera bajo los siguientes criterios transparentes:
           </p>
           <ul class="list-disc pl-5 space-y-1.5 text-xs text-slate-300">
-            <li><strong>Datos del Solicitante:</strong> Al solicitante <em>únicamente</em> se le solicita un <strong>nombre de referencia</strong> para identificar el encargo (no se solicita ni almacena número de cédula, correo electrónico ni contraseña).</li>
-            <li><strong>Datos del Encargo:</strong> Cada registro guarda el nombre de referencia, punto de recogida, punto de entrega, descripción breve del paquete o compra, la tarifa pactada y las <strong>coordenadas geográficas</strong> de origen para que el repartidor ubique el punto en el mapa.</li>
-            <li><strong>Datos del Repartidor / Mandadero:</strong> Se almacena su nombre, unidad mototaxi/moto, teléfono de contacto y token de autenticación. El teléfono del repartidor se muestra únicamente una vez aceptado el mandado para coordinar directamente la entrega vía WhatsApp o llamada.</li>
-            <li><strong>Registro Técnico de Visitas y Seguridad (Logs Técnicos):</strong> Para la prevención de abusos automatizados (bots, scrapers, ataques volumétricos o saturación indebida de peticiones) y diagnóstico de disponibilidad operativa, el servidor registra técnicamente en su base de datos local la dirección IP del visitante (obtenida de forma fidedigna respetando el reverse proxy perimetral), el identificador técnico del navegador (User-Agent, limitado a los primeros 255 caracteres) y la dirección de referencia técnica (Referer). Este registro es de índole estrictamente técnica y de seguridad perimetral; <strong>no se utiliza para perfilamiento publicitario, ni se vende ni comparte con terceros comerciales bajo ninguna circunstancia</strong>.</li>
+            <li><strong>Datos del Solicitante:</strong> Al solicitante se le requiere un nombre de referencia y su número de WhatsApp de contacto para coordinar la entrega en tiempo real y permitir la trazabilidad operativa en caso de disputas.</li>
+            <li><strong>Datos del Encargo:</strong> Cada registro guarda el nombre de referencia, número de WhatsApp de contacto, punto de recogida, punto de entrega, descripción del paquete o compra, la tarifa pactada y las <strong>coordenadas geográficas</strong> de origen para ubicar el encargo en el mapa.</li>
+            <li><strong>Datos del Repartidor (Registro Obligatorio):</strong> Para operar como repartidor activo, la plataforma requiere obligatoriamente nombre completo, número de cédula de identidad nicaragüense, número de WhatsApp, identificación de moto/placa y aceptación explícita de las Reglas del Encargo. <strong>El número de cédula NUNCA se expone en APIs públicas ni en las pantallas de clientes</strong>; se custodia de manera confidencial en el servidor para efectos de la bitácora técnica de auditoría y atención de diligencias o requerimientos legales.</li>
+            <li><strong>Bitácora de Estados ("Caja Negra" de Auditoría):</strong> Cada cambio de estado del mandado (creación, aceptación, en camino, entrega, cancelación o expiración TTL) se registra cronológicamente en una tabla inmutable de auditoría con fecha, hora, estado anterior, estado nuevo y actor responsable. Esta bitácora técnica constituye la evidencia documental objetiva ante cualquier disputa entre las partes.</li>
+            <li><strong>Registro Técnico de Visitas y Seguridad (Logs Técnicos):</strong> Para la prevención de abusos automatizados (bots, scrapers, saturación volumétrica o ataques) y diagnóstico de disponibilidad operativa, el servidor registra técnicamente en su base de datos local la dirección IP del visitante (obtenida fidedignamente respetando el proxy inverso perimetral), el identificador del navegador (User-Agent, limitado a 255 caracteres) y la dirección de referencia (Referer). Este registro es de índole estrictamente técnica y de seguridad perimetral; <strong>no se utiliza para perfilamiento publicitario, ni se vende ni comparte con terceros comerciales bajo ninguna circunstancia</strong>.</li>
             <li><strong>Ubicación de los Servidores:</strong> Los datos operativos y la base de datos residen en un servidor seguro ubicado en <strong>Houston, Texas, Estados Unidos</strong>.</li>
-            <li><strong>Plazo de Retención:</strong> Los registros de mandados realizados y los logs técnicos de visitas se conservan en el sistema con fines operativos y de seguridad hasta que el usuario titular solicite expresamente su supresión o borrado a través de nuestro canal de WhatsApp, o hasta las ventanas programadas de mantenimiento y depuración técnica.</li>
+            <li><strong>Plazo de Retención:</strong> Los registros de mandados realizados, expedientes y logs técnicos de visitas se conservan en el sistema con fines operativos y de seguridad hasta que el usuario titular solicite expresamente su supresión a través de nuestro canal de WhatsApp, o hasta las ventanas programadas de mantenimiento y depuración técnica.</li>
           </ul>
         </div>
       </section>
@@ -123,7 +124,7 @@
           <i class="fa-solid fa-cookie-bite text-sm"></i> 4. Almacenamiento Local (Local Storage y Caché)
         </h2>
         <p>
-          El único dato guardado en el almacenamiento local de tu navegador (HTML5 LocalStorage) es el <strong>token criptográfico de sesión del mandado</strong> (<code>mandados_token_&lt;id&gt;</code> y <code>mandados_active_trip_token</code>), utilizado de manera técnica y estrictamente funcional para validar la autorización de consulta de estado y cancelación de tu encargo, previniendo cancelaciones no autorizadas por terceros.
+          El único dato guardado en el almacenamiento local de tu navegador (HTML5 LocalStorage) es el <strong>token criptográfico de sesión del mandado</strong> (<code>mandados_token_&lt;id&gt;</code>) para validar la consulta y cancelación de tu encargo, y en el caso de repartidores su <strong>PIN/Token secreto de conductor</strong> (<code>mandados_driver_token</code>).
         </p>
         <p class="text-xs text-slate-400">
           La aplicación no utiliza cookies comerciales ni almacena en LocalStorage perfiles de navegación, roles ni rastreadores publicitarios.
@@ -133,15 +134,15 @@
       <!-- Sección 5 -->
       <section class="space-y-2">
         <h2 class="text-base font-extrabold text-sky-400 flex items-center gap-2">
-          <i class="fa-solid fa-handshake-angle text-sm"></i> 5. Naturaleza del Servicio y Exoneración de Responsabilidad
+          <i class="fa-solid fa-handshake-angle text-sm"></i> 5. Naturaleza del Servicio, Intermediación y Régimen de Responsabilidad
         </h2>
         <p>
-          <strong>Mandados App</strong> es una plataforma de software comunitario diseñada para facilitar el enlace y la libre coordinación entre personas que requieren envíos, compras o encomiendas y prestadores de servicio de mensajería independientes (mototaxistas y repartidores).
+          <strong>Mandados App</strong> es una plataforma de software comunitario diseñada para facilitar el enlace y la libre coordinación técnica entre personas que requieren encomiendas y repartidores independientes locales.
         </p>
         <ul class="list-disc pl-5 space-y-1 text-xs text-slate-400">
-          <li>La plataforma no es propietaria de las motocicletas ni unidades de reparto, ni transporta directamente mercancías.</li>
-          <li>Las tarifas sugeridas en la aplicación son únicamente valores referenciales del mercado; el costo final del servicio es pactado libremente entre solicitante y repartidor.</li>
-          <li>Los repartidores son trabajadores autónomos e independientes, responsables del cuidado del paquete y del cumplimiento de las normativas viales aplicables. Queda prohibido solicitar el transporte de sustancias ilícitas, peligrosas o no autorizadas por ley.</li>
+          <li><strong>Intermediario Técnico Puro:</strong> La plataforma NO custodia dinero de usuarios, NO cobra comisiones obligatorias por viaje ni mandado, y NO presta pólizas ni seguros sobre la carga o mercancías transportadas.</li>
+          <li><strong>Responsabilidad de las Partes:</strong> La tarifa es pactada libremente en efectivo directo entre solicitante y repartidor. Los repartidores son trabajadores autónomos e independientes, directamente responsables de la guarda y cuidado del paquete durante el traslado, así como del cumplimiento estricto de las leyes de tránsito. Queda prohibido solicitar o transportar sustancias ilícitas, armas o bienes prohibidos por ley.</li>
+          <li><strong>Suspensión Inmediata y Entrega de Bitácoras:</strong> Ante cualquier disputa grave, reclamo sustentado de pérdida, daño o apropiación indebida, o requerimiento expreso de la Policía Nacional o autoridad judicial competente, el operador de Mandados App suspenderá de inmediato y sin trámite previo la cuenta del repartidor o usuario involucrado, y pondrá a disposición de las autoridades competentes el expediente técnico íntegro y la bitácora electrónica de auditoría (caja negra) del encargo.</li>
         </ul>
       </section>
 
