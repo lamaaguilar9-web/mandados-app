@@ -1,1 +1,1 @@
-1.0.1-vitrina-tls
+1.2.0-registro-casos
