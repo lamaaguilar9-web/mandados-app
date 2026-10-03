@@ -1,13 +1,13 @@
 // ==========================================================================
-// CAPONERA APP - AUTOMATED DISPATCH CONTROLLER & REAL-TIME ENGINE
+// MANDADOS APP - AUTOMATED DISPATCH CONTROLLER & REAL-TIME ENGINE
 // ==========================================================================
 
 let mapInstance = null;
 let driverMarkers = [];
 let simulatedRouteLine = null;
 let userMarker = null;
-let currentSelectedFare = 20;
-let currentSelectedDriver = "José Ramón (Unidad #7)";
+let currentSelectedFare = 35;
+let currentSelectedDriver = "Carlos Ruiz (Unidad #1)";
 let userOrigin = "Mi ubicación actual";
 let userDestino = "Mercado Municipal";
 
@@ -20,13 +20,13 @@ let tripPollInterval = null;
 
 // Driver Mode State
 let driverPollInterval = null;
-let currentDriverId = 1; // José Ramón · Unidad #7
+let currentDriverId = 1; // Carlos Ruiz · Unidad #1
 
-// Configuration State (CA-9)
+// Configuration State
 let appConfig = {
   ciudad: 'Masaya',
-  tarifa_min: 15,
-  tarifa_max: 250,
+  tarifa_min: 20,
+  tarifa_max: 300,
   zonas: []
 };
 
@@ -98,13 +98,13 @@ function initPassengerMap() {
 
   const userIcon = L.divIcon({
     className: 'custom-user-pin',
-    html: `<div style="background:#10b981; width:22px; height:22px; border-radius:50%; border:3px solid #ffffff; box-shadow:0 0 18px #10b981;"></div>`,
+    html: `<div style="background:#0284c7; width:22px; height:22px; border-radius:50%; border:3px solid #ffffff; box-shadow:0 0 18px #0284c7;"></div>`,
     iconSize: [22, 22]
   });
   userMarker = L.marker(userCoords, { icon: userIcon }).addTo(mapInstance);
 }
 
-// Actualizar conductores reales en el mapa
+// Actualizar repartidores reales en el mapa
 async function fetchRealDrivers() {
   try {
     const res = await fetch('/api/conductores/activos');
@@ -112,7 +112,7 @@ async function fetchRealDrivers() {
     const drivers = await res.json();
     renderDriversOnMap(drivers);
   } catch (e) {
-    // Si corre offline o en Surge demo, mantener marcadores existentes
+    // Si corre offline, mantener marcadores existentes
   }
 }
 
@@ -126,12 +126,12 @@ function renderDriversOnMap(drivers) {
   const listContainer = document.getElementById('driverOptionsList');
   if (listContainer && drivers.length > 0) {
     listContainer.innerHTML = drivers.map((d, idx) => {
-      const driverName = d.nombre || d.name || 'Conductor';
-      const driverUnit = d.unidad || d.unit || 'Caponera';
+      const driverName = d.nombre || d.name || 'Repartidor';
+      const driverUnit = d.unidad || d.unit || 'Moto Reparto';
       return `
-      <div class="modern-driver-card ${idx === 0 ? 'active' : ''}" data-fare="${20 + idx * 5}" data-driver="${driverName}">
+      <div class="modern-driver-card ${idx === 0 ? 'active' : ''}" data-fare="${35 + idx * 5}" data-driver="${driverName}">
         <div class="driver-avatar-wrap">
-          <div class="driver-photo">🛺</div>
+          <div class="driver-photo">📦</div>
           <span class="status-dot online"></span>
         </div>
         <div class="driver-meta">
@@ -142,23 +142,23 @@ function renderDriversOnMap(drivers) {
           <p class="driver-sub-info">${driverUnit} · <span class="eta-text">En Línea</span></p>
         </div>
         <div class="driver-price-action">
-          <span class="fare-amount">C$ ${20 + idx * 5}.00</span>
-          <button class="btn-accept-chip" onclick="selectDriverOption(this, ${20 + idx * 5}, '${driverName}')">Elegir</button>
+          <span class="fare-amount">C$ ${35 + idx * 5}.00</span>
+          <button class="btn-accept-chip" onclick="selectDriverOption(this, ${35 + idx * 5}, '${driverName}')">Elegir</button>
         </div>
       </div>
     `;}).join('');
   }
 
   drivers.forEach(driver => {
-    const driverName = driver.nombre || driver.name || 'Conductor';
-    const driverUnit = driver.unidad || driver.unit || 'Caponera';
-    const caponeraIcon = L.divIcon({
-      className: 'custom-caponera-marker',
-      html: `<div style="background:rgba(245,158,11,0.95); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.25rem; border:2px solid #ffffff; box-shadow:0 0 16px rgba(245,158,11,0.9); cursor:pointer;">🛺</div>`,
+    const driverName = driver.nombre || driver.name || 'Repartidor';
+    const driverUnit = driver.unidad || driver.unit || 'Moto Reparto';
+    const repartidorIcon = L.divIcon({
+      className: 'custom-repartidor-marker',
+      html: `<div style="background:rgba(2,132,199,0.95); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.2rem; border:2px solid #ffffff; box-shadow:0 0 16px rgba(2,132,199,0.9); cursor:pointer;">📦</div>`,
       iconSize: [36, 36]
     });
 
-    const marker = L.marker([driver.lat, driver.lng], { icon: caponeraIcon }).addTo(mapInstance);
+    const marker = L.marker([driver.lat, driver.lng], { icon: repartidorIcon }).addTo(mapInstance);
     marker.bindPopup(`<strong>${driverName}</strong><br>${driverUnit}<br>🟢 Conectado`);
     driverMarkers.push({ marker, data: driver });
   });
@@ -205,24 +205,12 @@ function setupUIEventListeners() {
     document.getElementById('modalSearchAddress')?.classList.remove('active');
   });
 
-  document.getElementById('tabViajes')?.addEventListener('click', () => {
-    document.getElementById('tabViajes')?.classList.add('active');
-    document.getElementById('tabEnvios')?.classList.remove('active');
-    showToast("🛺 Modo Pasajeros activo");
-  });
-
-  document.getElementById('tabEnvios')?.addEventListener('click', () => {
-    document.getElementById('tabEnvios')?.classList.add('active');
-    document.getElementById('tabViajes')?.classList.remove('active');
-    showToast("📦 Modo Envíos y Mandados Express activo");
-  });
-
   document.getElementById('btnLocateMe')?.addEventListener('click', () => {
     requestRealLocation();
     showToast("📍 Actualizando tu ubicación en tiempo real...");
   });
 
-  // BOTÓN PRINCIPAL DE PEDIR VIAJE (DESPACHO AUTOMÁTICO)
+  // BOTÓN PRINCIPAL DE PEDIR MANDADO (DESPACHO AUTOMÁTICO)
   document.getElementById('btnConfirmarPedido')?.addEventListener('click', () => {
     solicitarViajeAutomatico();
   });
@@ -233,7 +221,7 @@ function setupUIEventListeners() {
 }
 
 // =========================================================
-// 4. MOTOR DE DESPACHO AUTOMÁTICO (LADO PASAJERO)
+// 4. MOTOR DE DESPACHO AUTOMÁTICO (LADO CLIENTE)
 // =========================================================
 async function solicitarViajeAutomatico() {
   if (currentSelectedFare < appConfig.tarifa_min || currentSelectedFare > appConfig.tarifa_max) {
@@ -244,18 +232,20 @@ async function solicitarViajeAutomatico() {
   const lbl = document.getElementById('lblConfirmarPedido');
   const btn = document.getElementById('btnConfirmarPedido');
 
-  if (lbl) lbl.textContent = "📡 Buscando caponera cercana...";
-  if (btn) btn.style.background = "#d97706";
+  if (lbl) lbl.textContent = "📡 Buscando repartidor cercano...";
+  if (btn) btn.style.background = "#0284c7";
 
-  showToast("📡 Conectando con caponeras activas en tu zona...");
+  showToast("📡 Conectando con repartidores activos en tu zona...");
 
   try {
     const res = await fetch('/api/viajes/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        pasajero_nombre: "Cliente Express",
         origen: userOrigin,
         destino: userDestino,
+        paquete_desc: "Mandado / Compra local",
         tarifa: currentSelectedFare,
         lat: userCoords[0],
         lng: userCoords[1]
@@ -267,23 +257,22 @@ async function solicitarViajeAutomatico() {
       activeTripId = data.viaje_id;
       if (data.session_token) {
         try {
-          localStorage.setItem(`caponera_token_${activeTripId}`, data.session_token);
-          localStorage.setItem('caponera_active_trip_token', data.session_token);
+          localStorage.setItem(`mandados_token_${activeTripId}`, data.session_token);
+          localStorage.setItem('mandados_active_trip_token', data.session_token);
         } catch (err) {
           console.warn("No se pudo guardar session_token en localStorage:", err);
         }
       }
       iniciarMonitoreoViaje(activeTripId);
     } else {
-      throw new Error(data.error || "Error al crear viaje");
+      throw new Error(data.error || "Error al crear mandado");
     }
   } catch (e) {
-    console.log("Error creando viaje:", e);
+    console.log("Error creando mandado:", e);
     showToast("⚠️ Conectando vía enlace alternativo...");
-    // Fallback: Si no hay conexión al backend, abre WhatsApp con el número del despachador
-    const msg = `🛺 *SOLICITUD DE CAPONERA* 🛺%0A*Origen:* ${userOrigin}%0A*Destino:* ${userDestino}%0A*Tarifa:* C$ ${currentSelectedFare}.00`;
+    const msg = `📦 *SOLICITUD DE MANDADO* 📦%0A*Recogida:* ${userOrigin}%0A*Entrega:* ${userDestino}%0A*Tarifa:* C$ ${currentSelectedFare}.00`;
     window.open(`https://wa.me/50589130414?text=${msg}`, '_blank');
-    if (lbl) lbl.textContent = `⚡ Confirmar Viaje (C$ ${currentSelectedFare}.00)`;
+    if (lbl) lbl.textContent = `⚡ Confirmar Mandado (C$ ${currentSelectedFare}.00)`;
     if (btn) btn.style.background = "";
   }
 }
@@ -291,7 +280,7 @@ async function solicitarViajeAutomatico() {
 function iniciarMonitoreoViaje(viajeId) {
   if (tripPollInterval) clearInterval(tripPollInterval);
 
-  const token = localStorage.getItem(`caponera_token_${viajeId}`) || localStorage.getItem('caponera_active_trip_token') || '';
+  const token = localStorage.getItem(`mandados_token_${viajeId}`) || localStorage.getItem('mandados_active_trip_token') || '';
 
   tripPollInterval = setInterval(async () => {
     try {
@@ -315,29 +304,28 @@ function iniciarMonitoreoViaje(viajeId) {
 window.cancelarViajeActivo = async function(viajeId) {
   const targetId = viajeId || activeTripId;
   if (!targetId) return;
-  const token = localStorage.getItem(`caponera_token_${targetId}`) || localStorage.getItem('caponera_active_trip_token') || '';
+  const token = localStorage.getItem(`mandados_token_${targetId}`) || localStorage.getItem('mandados_active_trip_token') || '';
   try {
     const res = await fetch(`/api/viajes/${targetId}/cancelar`, {
       method: 'POST',
-      headers: {
+      headers: { 
         'Content-Type': 'application/json',
         'X-Session-Token': token
       },
       body: JSON.stringify({ viaje_id: targetId, session_token: token })
     });
-    const resData = await res.json();
-    if (resData.success) {
+    if (res.ok) {
       if (tripPollInterval) {
         clearInterval(tripPollInterval);
         tripPollInterval = null;
       }
       try {
-        localStorage.removeItem(`caponera_token_${targetId}`);
+        localStorage.removeItem(`mandados_token_${targetId}`);
       } catch (err) {}
-      showToast("Viaje cancelado exitosamente.");
+      showToast("Mandado cancelado exitosamente.");
     }
   } catch (e) {
-    console.log("Error cancelando viaje:", e);
+    console.log("Error cancelando mandado:", e);
   }
 };
 
@@ -349,18 +337,18 @@ function mostrarConfirmacionPasajero(conductor, tarifa) {
     container.innerHTML = `
       <div class="sheet-drag-handle"></div>
       <div style="text-align:center; padding: 18px 12px;">
-        <div style="font-size: 3.2rem; margin-bottom: 6px; animation: bounce 1s infinite;">🛺💨</div>
-        <h3 style="color:#10b981; font-weight:900; font-size:1.3rem; margin-bottom:4px;">¡TU CAPONERA VA EN CAMINO!</h3>
-        <p style="color:#cbd5e1; font-size:0.95rem; margin-bottom:14px;">El conductor aceptó tu carrera de inmediato</p>
+        <div style="font-size: 3.2rem; margin-bottom: 6px; animation: bounce 1s infinite;">📦💨</div>
+        <h3 style="color:#0284c7; font-weight:900; font-size:1.3rem; margin-bottom:4px;">¡TU REPARTIDOR VA EN CAMINO!</h3>
+        <p style="color:#cbd5e1; font-size:0.95rem; margin-bottom:14px;">El repartidor aceptó tu encargo de inmediato</p>
         
         <div style="background:rgba(255,255,255,0.06); border-radius:14px; padding:14px; margin-bottom:14px; border:1px solid rgba(255,255,255,0.15); text-align:left;">
           <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span style="color:#94a3b8;">Conductor:</span>
+            <span style="color:#94a3b8;">Repartidor:</span>
             <strong style="color:#fff; font-size:1.05rem;">${conductor.nombre}</strong>
           </div>
           <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span style="color:#94a3b8;">Caponera:</span>
-            <strong style="color:#f59e0b; font-size:1.05rem;">${conductor.unidad}</strong>
+            <span style="color:#94a3b8;">Unidad:</span>
+            <strong style="color:#0284c7; font-size:1.05rem;">${conductor.unidad}</strong>
           </div>
           <div style="display:flex; justify-content:space-between;">
             <span style="color:#94a3b8;">Tarifa Acordada:</span>
@@ -368,11 +356,11 @@ function mostrarConfirmacionPasajero(conductor, tarifa) {
           </div>
         </div>
 
-        <a href="https://wa.me/${conductor.telefono}?text=Hola%20${encodeURIComponent(conductor.nombre)},%20ped%C3%AD%20tu%20caponera%20en%20la%20app.%20Te%20espero%20en%20${encodeURIComponent(userOrigin)}" 
+        <a href="https://wa.me/${conductor.telefono}?text=Hola%20${encodeURIComponent(conductor.nombre)},%20solicit%C3%A9%20tu%20servicio%20de%20mandado%20en%20la%20app.%20Te%20espero%20en%20${encodeURIComponent(userOrigin)}" 
            target="_blank" 
            class="btn-neon-emerald" 
            style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; text-decoration:none; padding:14px; font-weight:800; border-radius:12px; font-size:1rem; margin-bottom:10px;">
-          💬 Abrir WhatsApp con el Conductor
+          💬 Abrir WhatsApp con el Repartidor
         </a>
 
         <a href="tel:${conductor.telefono}" 
@@ -382,11 +370,11 @@ function mostrarConfirmacionPasajero(conductor, tarifa) {
       </div>
     `;
   }
-  showToast("🎉 ¡Conductor en camino a recogerte!");
+  showToast("🎉 ¡Repartidor en camino a recoger tu encargo!");
 }
 
 // =========================================================
-// 5. MOTOR DE MODO CONDUCTOR (RECEPCIÓN Y ACEPTACIÓN)
+// 5. MOTOR DE MODO REPARTIDOR (RECEPCIÓN Y ACEPTACIÓN)
 // =========================================================
 function startDriverModeListeners() {
   const btnPower = document.getElementById('btnToggleDriverOnline');
@@ -398,7 +386,7 @@ function startDriverModeListeners() {
     const lbl = document.getElementById('lblDriverStatus');
     if (lbl) lbl.textContent = isOnline ? 'EN LÍNEA' : 'DESCONECTADO';
 
-    showToast(isOnline ? '🟢 Conectado: Recibiendo viajes en tiempo real' : '🔴 Modo Desconectado');
+    showToast(isOnline ? '🟢 Conectado: Recibiendo mandados en tiempo real' : '🔴 Modo Desconectado');
 
     if (isOnline) {
       activarGPSConductor();
@@ -410,7 +398,6 @@ function startDriverModeListeners() {
     }
   });
 
-  // Iniciar automáticamente si ya está con clase online
   if (btnPower.classList.contains('online')) {
     pollViajesConductor();
     driverPollInterval = setInterval(pollViajesConductor, 3000);
@@ -421,7 +408,7 @@ function activarGPSConductor() {
   if ('geolocation' in navigator) {
     navigator.geolocation.watchPosition(
       (pos) => {
-        fetch('/api/conductor/ubicacion', {
+        fetch('/api/conductor/posicion', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -458,27 +445,27 @@ function renderFeedConductores(carreras) {
     feed.innerHTML = `
       <div style="text-align:center; padding:30px 15px; color:#94a3b8;">
         <div style="font-size:2.2rem; margin-bottom:8px;">📡</div>
-        <p style="font-weight:600;">Monitoreando carreras en tu radio de 3 km...</p>
-        <small style="color:#64748b;">Cuando un pasajero pida viaje, sonará una alarma aquí.</small>
+        <p style="font-weight:600;">Monitoreando mandados en tu radio de 4 km...</p>
+        <small style="color:#64748b;">Cuando un cliente solicite un mandado, sonará una alarma aquí.</small>
       </div>
     `;
     return;
   }
 
-  // Hacer sonar pitido de alerta si hay carreras
   playTripAlertSound();
 
   feed.innerHTML = carreras.map(c => `
-    <div class="driver-trip-card" style="background:#1e293b; border:2px solid #10b981; border-radius:14px; padding:15px; margin-bottom:12px; box-shadow:0 6px 20px rgba(16,185,129,0.25);">
+    <div class="driver-trip-card" style="background:#1e293b; border:2px solid #0284c7; border-radius:14px; padding:15px; margin-bottom:12px; box-shadow:0 6px 20px rgba(2,132,199,0.25);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <span style="background:#10b981; color:#000; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:20px; text-transform:uppercase;">¡NUEVA SOLICITUD!</span>
-        <strong style="color:#f59e0b; font-size:1.3rem;">C$ ${c.tarifa}.00</strong>
+        <span style="background:#0284c7; color:#fff; font-weight:800; font-size:0.75rem; padding:3px 10px; border-radius:20px; text-transform:uppercase;">¡NUEVO MANDADO!</span>
+        <strong style="color:#38bdf8; font-size:1.3rem;">C$ ${c.tarifa}.00</strong>
       </div>
-      <p style="margin:6px 0; color:#fff; font-size:0.95rem;">📍 <strong>Origen:</strong> ${c.origen}</p>
-      <p style="margin:6px 0; color:#cbd5e1; font-size:0.95rem;">🏁 <strong>Destino:</strong> ${c.destino}</p>
+      <p style="margin:6px 0; color:#fff; font-size:0.95rem;">📍 <strong>Recogida:</strong> ${c.origen}</p>
+      <p style="margin:6px 0; color:#cbd5e1; font-size:0.95rem;">🏁 <strong>Entrega:</strong> ${c.destino}</p>
+      ${c.paquete ? `<p style="margin:6px 0; color:#93c5fd; font-size:0.9rem;">📦 <strong>Paquete:</strong> ${c.paquete}</p>` : ''}
       <small style="color:#94a3b8; display:block; margin:6px 0 12px 0;">📏 Distancia: a ${c.distancia_km} km de ti</small>
       <button onclick="conductorTomarCarrera(${c.id}, ${c.tarifa})" class="btn-neon-emerald" style="width:100%; padding:14px; font-weight:900; font-size:1.05rem; border-radius:10px; cursor:pointer; letter-spacing:0.5px;">
-        ⚡ ACEPTAR CARRERA AHORA
+        ⚡ ACEPTAR MANDADO AHORA
       </button>
     </div>
   `).join('');
@@ -494,10 +481,9 @@ window.conductorTomarCarrera = async function(viajeId, tarifa) {
 
     const data = await res.json();
     if (data.success) {
-      showToast("🎉 ¡Carrera Ganada! Dirígete al pasajero.");
+      showToast("🎉 ¡Mandado Aceptado! Dirígete al punto de recogida.");
       playTripAlertSound();
 
-      // Incrementar estadísticas en el HUD
       const countEl = document.getElementById('hudViajesHoy');
       const cashEl = document.getElementById('hudGanadoHoy');
       if (countEl) countEl.textContent = parseInt(countEl.textContent || 0) + 1;
@@ -508,11 +494,11 @@ window.conductorTomarCarrera = async function(viajeId, tarifa) {
 
       pollViajesConductor();
     } else {
-      showToast(`⚠️ ${data.error || 'Esta carrera ya fue tomada'}`);
+      showToast(`⚠️ ${data.error || 'Este mandado ya fue tomado'}`);
       pollViajesConductor();
     }
   } catch (e) {
-    showToast("❌ Error al aceptar carrera");
+    showToast("❌ Error al aceptar mandado");
   }
 };
 
@@ -527,14 +513,14 @@ window.selectDriverOption = function(btnElement, fare, driverName) {
   btnElement.closest('.modern-driver-card')?.classList.add('active');
 
   const lbl = document.getElementById('lblConfirmarPedido');
-  if (lbl) lbl.textContent = `⚡ Confirmar Viaje (C$ ${fare}.00)`;
-  showToast(`🛺 Seleccionado: ${driverName} (C$ ${fare}.00)`);
+  if (lbl) lbl.textContent = `⚡ Confirmar Mandado (C$ ${fare}.00)`;
+  showToast(`📦 Seleccionado: ${driverName} (C$ ${fare}.00)`);
 };
 
 window.adjustOffer = function(amount) {
   currentSelectedFare = amount;
   const lbl = document.getElementById('lblConfirmarPedido');
-  if (lbl) lbl.textContent = `⚡ Confirmar Viaje (C$ ${amount}.00)`;
+  if (lbl) lbl.textContent = `⚡ Confirmar Mandado (C$ ${amount}.00)`;
   showToast(`Tarifa ajustada a C$ ${amount}.00`);
 };
 
@@ -543,7 +529,7 @@ window.setFastDestino = function(lugar) {
   if (input) input.value = lugar;
   userDestino = lugar;
   document.getElementById('modalSearchAddress')?.classList.remove('active');
-  showToast(`🏁 Destino seleccionado: ${lugar}`);
+  showToast(`🏁 Destino fijado: ${lugar}`);
 };
 
 window.switchNav = function(tabKey) {
@@ -628,7 +614,6 @@ function copyBanproData(text, message) {
 async function enviarComprobanteBanpro() {
   const ref = document.getElementById('inputBanproReferencia')?.value.trim() || 'Comprobante adjunto';
 
-  // Registrar en backend
   try {
     await fetch('/api/conductor/recarga', {
       method: 'POST',
@@ -643,14 +628,14 @@ async function enviarComprobanteBanpro() {
   } catch (e) {}
 
   const msg = 
-`🛺 *SOLICITUD DE RECARGA - CAPONERA APP* 🛺
+`📦 *SOLICITUD DE RECARGA - MANDADOS APP* 📦
 
 *Titular Cuenta:* Luis Mongrio
 *Banco:* BANPRO Grupo Promerica 🇳🇮
 *Plan:* ${selectedBanproPlanName} (C$ ${selectedBanproPlanPrice}.00)
 *Nº Referencia / Minuta:* ${ref}
 
-_Hola Luis, he realizado mi pago por Banpro para activar mi plan de conductor en Caponera App._`;
+_Hola Luis, he realizado mi pago por Banpro para activar mi plan de repartidor en Mandados App._`;
 
   const url = `https://wa.me/${BANPRO_WHATSAPP_PHONE}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');

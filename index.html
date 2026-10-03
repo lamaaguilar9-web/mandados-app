@@ -88,106 +88,108 @@
         </button>
       </div>
 
-      <!-- Selector de Tipo de Servicio -->
-      <div class="grid grid-cols-2 gap-3">
-        <button id="typeTrip" onclick="seleccionarTipoServicio('viaje')" class="p-3 rounded-2xl bg-amber-500 text-slate-950 font-black border border-amber-400 flex flex-col items-center gap-1.5 transition-all shadow-md active:scale-95">
-          <i class="fa-solid fa-person-walking-luggage text-lg"></i>
-          <span class="text-xs">Viaje Pasajero</span>
-        </button>
-        <button id="typeDelivery" onclick="seleccionarTipoServicio('mandado')" class="p-3 rounded-2xl bg-slate-900 text-slate-300 font-black border border-slate-800 flex flex-col items-center gap-1.5 hover:border-slate-700 transition-all active:scale-95">
-          <i class="fa-solid fa-box-open text-lg"></i>
-          <span class="text-xs">Mandado / Encomienda</span>
-        </button>
+      <!-- Modo Servicio de Mandados y Encomiendas -->
+      <div class="p-3 rounded-2xl bg-sky-500 text-slate-950 font-black border border-sky-400 flex items-center justify-center gap-2 shadow-md">
+        <i class="fa-solid fa-box-open text-base"></i>
+        <span class="text-xs tracking-wide">Servicio de Envíos, Compras y Mandados</span>
       </div>
 
-      <!-- Formulario de Solicitud de Carrera -->
+      <!-- Formulario de Solicitud de Mandado -->
       <div class="bg-slate-900 border border-slate-800 p-4 rounded-3xl flex flex-col gap-3 shadow-md">
         <div>
           <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-            <i class="fa-solid fa-circle-dot text-emerald-400 mr-1"></i> Punto de recogida (Origen)
+            <i class="fa-solid fa-circle-dot text-emerald-400 mr-1"></i> Punto de recogida (¿Dónde compran o recogen?)
           </label>
-          <input id="inputOrigin" type="text" placeholder="Ej: Parque Central / Esquina Los Leones" value="Mercado Municipal de Masaya"
-            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 transition" />
+          <input id="inputOrigin" type="text" placeholder="Ej: Farmacia San Jerónimo / Mercado" value="Mercado Municipal de Masaya"
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-400 transition" />
         </div>
 
         <div>
           <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-            <i class="fa-solid fa-location-dot text-rose-500 mr-1"></i> Destino
+            <i class="fa-solid fa-location-dot text-rose-500 mr-1"></i> Punto de entrega (¿Dónde entregan?)
           </label>
-          <input id="inputDestination" type="text" placeholder="Ej: Barrio San Jerónimo / Shell" value="Las 7 Esquinas, Reparto San Juan"
-            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-400 transition" />
+          <input id="inputDestination" type="text" placeholder="Ej: Barrio San Juan / Costado Norte Shell" value="Las 7 Esquinas, Reparto San Juan"
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-400 transition" />
+        </div>
+
+        <div>
+          <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
+            <i class="fa-solid fa-box text-sky-400 mr-1"></i> ¿Qué se envía o compra? (Descripción corta)
+          </label>
+          <input id="inputPackageDesc" type="text" placeholder="Ej: Medicinas, almuerzo, repuesto, documentos..." value="Medicamentos y encargo urgente"
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-400 transition" />
         </div>
 
         <!-- Tarifa en Córdobas (Negociación Rápida) -->
         <div class="pt-2 border-t border-slate-800/80">
           <div class="flex justify-between items-center mb-1.5">
             <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Tarifa Ofrecida (C$)</label>
-            <span class="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+            <span class="text-[10px] text-sky-400 font-bold flex items-center gap-1">
               <i class="fa-solid fa-money-bill-wave text-emerald-400"></i> Efectivo Directo
             </span>
           </div>
           
           <div class="flex items-center gap-2">
-            <button onclick="ajustarTarifa(-5)" class="w-11 h-11 rounded-2xl bg-slate-950 border border-slate-800 text-amber-400 font-black text-lg hover:bg-slate-800 active:scale-95 transition flex items-center justify-center">-</button>
+            <button onclick="ajustarTarifa(-5)" class="w-11 h-11 rounded-2xl bg-slate-950 border border-slate-800 text-sky-400 font-black text-lg hover:bg-slate-800 active:scale-95 transition flex items-center justify-center">-</button>
             <div class="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-3 py-2 flex items-center justify-center shadow-inner">
-              <span class="text-sm text-amber-400 font-extrabold mr-1">C$</span>
-              <input id="inputFare" type="number" value="30" class="w-20 bg-transparent text-center font-black text-xl text-white focus:outline-none" />
+              <span class="text-sm text-sky-400 font-extrabold mr-1">C$</span>
+              <input id="inputFare" type="number" value="35" class="w-20 bg-transparent text-center font-black text-xl text-white focus:outline-none" />
             </div>
-            <button onclick="ajustarTarifa(5)" class="w-11 h-11 rounded-2xl bg-slate-950 border border-slate-800 text-amber-400 font-black text-lg hover:bg-slate-800 active:scale-95 transition flex items-center justify-center">+</button>
+            <button onclick="ajustarTarifa(5)" class="w-11 h-11 rounded-2xl bg-slate-950 border border-slate-800 text-sky-400 font-black text-lg hover:bg-slate-800 active:scale-95 transition flex items-center justify-center">+</button>
           </div>
 
-          <!-- Botones de tarifa rápida local de Masaya -->
+          <!-- Botones de tarifa rápida para Mandados -->
           <div class="flex gap-2 mt-2">
-            <button onclick="fijarTarifa(20)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-amber-500/50 active:scale-95 transition">C$ 20</button>
-            <button onclick="fijarTarifa(30)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-amber-500/50 active:scale-95 transition">C$ 30</button>
-            <button onclick="fijarTarifa(40)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-amber-500/50 active:scale-95 transition">C$ 40</button>
-            <button onclick="fijarTarifa(50)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-amber-500/50 active:scale-95 transition">C$ 50</button>
+            <button onclick="fijarTarifa(35)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-sky-500/50 active:scale-95 transition">C$ 35</button>
+            <button onclick="fijarTarifa(40)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-sky-500/50 active:scale-95 transition">C$ 40</button>
+            <button onclick="fijarTarifa(50)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-sky-500/50 active:scale-95 transition">C$ 50</button>
+            <button onclick="fijarTarifa(60)" class="flex-1 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:border-sky-500/50 active:scale-95 transition">C$ 60</button>
           </div>
         </div>
 
         <div>
-          <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Nombre o quién viaja</label>
+          <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Nombre o contacto que solicita/recibe</label>
           <input id="inputPassengerName" type="text" placeholder="Tu nombre" value="Luis Aguilar"
-            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400 transition" />
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
         </div>
 
-        <!-- Botón Solicitar Caponera -->
-        <button id="btnRequestTrip" onclick="solicitarViaje()" class="w-full mt-1 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black py-3.5 rounded-2xl text-sm transition shadow-lg shadow-amber-500/25 active:scale-[0.98] flex items-center justify-center gap-2">
-          <i class="fa-solid fa-paper-plane"></i> PEDIR CAPONERA AHORA
+        <!-- Botón Solicitar Mandado -->
+        <button id="btnRequestTrip" onclick="solicitarViaje()" class="w-full mt-1 bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-black py-3.5 rounded-2xl text-sm transition shadow-lg shadow-sky-500/25 active:scale-[0.98] flex items-center justify-center gap-2">
+          <i class="fa-solid fa-paper-plane"></i> PEDIR MANDADO AHORA
         </button>
       </div>
 
-      <!-- Tarjeta de Estado del Pedido Activo (Oculta por defecto) -->
-      <div id="activeTripCard" class="hidden bg-slate-900 border-2 border-amber-500/70 p-4 rounded-3xl flex flex-col gap-3 relative overflow-hidden shadow-2xl animate-fade-in">
+      <!-- Tarjeta de Estado del Mandado Activo (Oculta por defecto) -->
+      <div id="activeTripCard" class="hidden bg-slate-900 border-2 border-sky-500/70 p-4 rounded-3xl flex flex-col gap-3 relative overflow-hidden shadow-2xl animate-fade-in">
         <div class="flex justify-between items-center">
-          <span id="tripStatusBadge" class="text-[11px] font-black px-3 py-1 rounded-full bg-amber-500 text-slate-950 flex items-center gap-1.5 shadow">
-            <span class="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span> BUSCANDO CAPONERA
+          <span id="tripStatusBadge" class="text-[11px] font-black px-3 py-1 rounded-full bg-sky-500 text-slate-950 flex items-center gap-1.5 shadow">
+            <span class="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span> BUSCANDO REPARTIDOR
           </span>
           <button onclick="cancelarViaje()" class="text-xs text-rose-400 hover:text-rose-300 font-extrabold transition">Cancelar</button>
         </div>
 
         <!-- Radar de Búsqueda Animado -->
         <div id="searchRadar" class="py-5 flex flex-col items-center justify-center gap-2.5">
-          <div class="w-20 h-20 rounded-full bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center text-amber-400 text-2xl pulse-radar shadow-inner">
-            <i class="fa-solid fa-motorcycle"></i>
+          <div class="w-20 h-20 rounded-full bg-sky-500/10 border-2 border-sky-500/40 flex items-center justify-center text-sky-400 text-2xl pulse-radar shadow-inner">
+            <i class="fa-solid fa-boxes-packing"></i>
           </div>
-          <p class="text-xs font-bold text-slate-300 text-center">Alertando a las caponeras más cercanas...</p>
+          <p class="text-xs font-bold text-slate-300 text-center">Alertando a los repartidores más cercanos...</p>
           <span class="text-[10px] text-slate-500">Sincronización en tiempo real vía SSE</span>
         </div>
 
-        <!-- Datos del Conductor Asignado -->
+        <!-- Datos del Repartidor Asignado -->
         <div id="driverDetails" class="hidden flex flex-col gap-3 pt-3 border-t border-slate-800">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 font-black text-2xl flex items-center justify-center shadow-lg">
-                <i class="fa-solid fa-user-ninja"></i>
+              <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-400 to-sky-600 text-slate-950 font-black text-2xl flex items-center justify-center shadow-lg">
+                <i class="fa-solid fa-motorcycle"></i>
               </div>
               <div>
-                <h4 id="driverName" class="font-extrabold text-sm text-white">José Ramón</h4>
-                <p id="driverUnit" class="text-xs text-amber-400 font-bold flex items-center gap-1">
-                  <i class="fa-solid fa-certificate"></i> Unidad #7 &bull; Caponera Express
+                <h4 id="driverName" class="font-extrabold text-sm text-white">Carlos Ruiz</h4>
+                <p id="driverUnit" class="text-xs text-sky-400 font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-certificate"></i> Unidad #1 &bull; Moto Reparto Express
                 </p>
-                <span class="text-[10px] text-slate-400">⭐ 4.9 &bull; Conductor Verificado</span>
+                <span class="text-[10px] text-slate-400">⭐ 4.9 &bull; Repartidor Verificado</span>
               </div>
             </div>
             <div class="text-right">
@@ -201,7 +203,7 @@
               <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
             </a>
             <button onclick="simularFinalizar()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 px-3 rounded-xl text-xs transition active:scale-95">
-              <i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Completar
+              <i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Entregado
             </button>
           </div>
         </div>
@@ -380,9 +382,9 @@
         <div class="flex justify-between items-center">
           <div>
             <h3 class="font-black text-sm text-white flex items-center gap-1.5">
-              <i class="fa-solid fa-motorcycle text-amber-400"></i> Mi Unidad #7
+              <i class="fa-solid fa-motorcycle text-sky-400"></i> Mi Unidad #1
             </h3>
-            <p class="text-xs text-slate-400">José Ramón (Caponera Express)</p>
+            <p class="text-xs text-slate-400">Carlos Ruiz (Moto Reparto Express)</p>
           </div>
           <button id="btnToggleDriverStatus" onclick="toggleDisponibilidad()" class="px-3.5 py-1.5 rounded-full text-xs font-black bg-emerald-500 text-slate-950 flex items-center gap-1.5 shadow-md active:scale-95 transition">
             <span class="w-2 h-2 rounded-full bg-slate-950"></span> DISPONIBLE
@@ -392,11 +394,11 @@
         <div class="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800">
           <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 shadow-inner">
             <span class="text-[10px] text-slate-400 uppercase font-black">Ganado Hoy</span>
-            <div class="text-lg font-black text-emerald-400">C$ 380</div>
+            <div class="text-lg font-black text-emerald-400">C$ 460</div>
           </div>
           <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 shadow-inner">
-            <span class="text-[10px] text-slate-400 uppercase font-black">Carreras Hechas</span>
-            <div class="text-lg font-black text-amber-400">12 viajes</div>
+            <span class="text-[10px] text-slate-400 uppercase font-black">Mandados Hechos</span>
+            <div class="text-lg font-black text-sky-400">10 entregas</div>
           </div>
         </div>
       </div>
@@ -405,12 +407,12 @@
       <div>
         <div class="flex justify-between items-center mb-2 px-1">
           <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Viajes Solicitados en <span class="city-name-label">Masaya</span>
+            <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span> Mandados Solicitados en <span class="city-name-label">Masaya</span>
           </h3>
-          <span id="requestsCount" class="text-[10px] bg-slate-900 border border-slate-800 text-amber-400 font-bold px-2 py-0.5 rounded-full">Sincronizando...</span>
+          <span id="requestsCount" class="text-[10px] bg-slate-900 border border-slate-800 text-sky-400 font-bold px-2 py-0.5 rounded-full">Sincronizando...</span>
         </div>
 
-        <!-- Lista Dinámica de Viajes -->
+        <!-- Lista Dinámica de Mandados -->
         <div id="driverFeed" class="flex flex-col gap-3">
           <!-- Inyectado dinámicamente -->
         </div>
@@ -419,15 +421,15 @@
 
     <!-- Navegación Inferior Móvil -->
     <nav class="bg-slate-950/95 backdrop-blur-md border-t border-slate-800 p-2.5 flex justify-around items-center sticky bottom-0 z-40">
-      <button onclick="cambiarRol('pasajero')" class="flex flex-col items-center text-xs font-extrabold text-amber-400 hover:text-amber-300 active:scale-95 transition">
-        <i class="fa-solid fa-map-location-dot text-base mb-1"></i>
+      <button onclick="cambiarRol('pasajero')" class="flex flex-col items-center text-xs font-extrabold text-sky-400 hover:text-sky-300 active:scale-95 transition">
+        <i class="fa-solid fa-box-open text-base mb-1"></i>
         <span>Pedir</span>
       </button>
-      <button onclick="cambiarRol('conductor')" class="flex flex-col items-center text-xs font-extrabold text-slate-400 hover:text-amber-400 active:scale-95 transition">
-        <i class="fa-solid fa-route text-base mb-1"></i>
-        <span>Caponero</span>
+      <button onclick="cambiarRol('conductor')" class="flex flex-col items-center text-xs font-extrabold text-slate-400 hover:text-sky-400 active:scale-95 transition">
+        <i class="fa-solid fa-motorcycle text-base mb-1"></i>
+        <span>Repartidor</span>
       </button>
-      <button onclick="mostrarTarifario()" class="flex flex-col items-center text-xs font-extrabold text-slate-400 hover:text-amber-400 active:scale-95 transition">
+      <button onclick="mostrarTarifario()" class="flex flex-col items-center text-xs font-extrabold text-slate-400 hover:text-sky-400 active:scale-95 transition">
         <i class="fa-solid fa-tags text-base mb-1"></i>
         <span>Tarifas</span>
       </button>
@@ -437,20 +439,19 @@
       </button>
     </nav>
 
-    <!-- Modal Tarifario Local de Referencia -->
+    <!-- Modal Tarifario Local de Mandados -->
     <div id="fareModal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
       <div class="bg-slate-900 border border-slate-800 w-full max-w-xs rounded-3xl p-5 shadow-2xl flex flex-col gap-3">
-        <h3 class="font-black text-sm text-amber-400 flex items-center gap-2">
-          <i class="fa-solid fa-circle-info"></i> Tarifas Sugeridas en Masaya
+        <h3 class="font-black text-sm text-sky-400 flex items-center gap-2">
+          <i class="fa-solid fa-circle-info"></i> Tarifas Sugeridas de Mandados
         </h3>
-        <p class="text-[11px] text-slate-400">Precios promedio para evitar cobros excesivos:</p>
+        <p class="text-[11px] text-slate-400">Precios referenciales para mandados y compras locales:</p>
         <ul class="text-xs text-slate-300 flex flex-col gap-2.5 divide-y divide-slate-800">
-          <li class="pt-2 flex justify-between"><span>Casco Urbano / Centro:</span> <strong class="text-white">C$ 20 - 30</strong></li>
-          <li class="pt-2 flex justify-between"><span>Hacia Barrios / Repartos:</span> <strong class="text-white">C$ 30 - 40</strong></li>
-          <li class="pt-2 flex justify-between"><span>Comarcas / Distancias largas:</span> <strong class="text-white">C$ 50 - 70</strong></li>
-          <li class="pt-2 flex justify-between"><span>Mandados / Encomiendas:</span> <strong class="text-white">C$ 35 - 50</strong></li>
+          <li class="pt-2 flex justify-between"><span>Casco Urbano / Mandado Rápido:</span> <strong class="text-white">C$ 35 - 50</strong></li>
+          <li class="pt-2 flex justify-between"><span>Hacia Barrios / Encomienda:</span> <strong class="text-white">C$ 50 - 65</strong></li>
+          <li class="pt-2 flex justify-between"><span>Comarcas / Distancias largas:</span> <strong class="text-white">C$ 70 - 100</strong></li>
         </ul>
-        <button onclick="ocultarTarifario()" class="w-full mt-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition active:scale-95">¡Entendido!</button>
+        <button onclick="ocultarTarifario()" class="w-full mt-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition active:scale-95">¡Entendido!</button>
       </div>
     </div>
 
@@ -689,11 +690,12 @@
     async function solicitarViaje() {
       const origen = document.getElementById('inputOrigin').value.trim();
       const destino = document.getElementById('inputDestination').value.trim();
-      const cliente = document.getElementById('inputPassengerName').value.trim() || 'Pasajero Express';
-      const tarifa = parseInt(document.getElementById('inputFare').value) || 30;
+      const paquete = (document.getElementById('inputPackageDesc')?.value || '').trim() || 'Mandado estándar';
+      const cliente = document.getElementById('inputPassengerName').value.trim() || 'Cliente';
+      const tarifa = parseInt(document.getElementById('inputFare').value) || 35;
 
       if (!origen || !destino) {
-        alert('Por favor ingresa origen y destino.');
+        alert('Por favor ingresa punto de recogida y entrega.');
         return;
       }
 
@@ -710,8 +712,8 @@
       card.classList.remove('hidden');
       radar.classList.remove('hidden');
       details.classList.add('hidden');
-      badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span> BUSCANDO CAPONERA`;
-      badge.className = 'text-[11px] font-black px-3 py-1 rounded-full bg-amber-500 text-slate-950 flex items-center gap-1.5 shadow';
+      badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-950 animate-ping"></span> BUSCANDO REPARTIDOR`;
+      badge.className = 'text-[11px] font-black px-3 py-1 rounded-full bg-sky-500 text-slate-950 flex items-center gap-1.5 shadow';
 
       // Intento de conexión con el backend de Python SQLite
       try {
@@ -722,6 +724,7 @@
             pasajero_nombre: cliente,
             origen: origen,
             destino: destino,
+            paquete_desc: paquete,
             tarifa: tarifa,
             lat: MASAYA_COORDS[0],
             lng: MASAYA_COORDS[1]
@@ -732,12 +735,12 @@
           estado.viajeActivoId = resData.viaje_id;
           if (resData.session_token) {
             try {
-              localStorage.setItem(`caponera_token_${estado.viajeActivoId}`, resData.session_token);
-              localStorage.setItem('caponera_active_trip_token', resData.session_token);
+              localStorage.setItem(`mandados_token_${estado.viajeActivoId}`, resData.session_token);
+              localStorage.setItem('mandados_active_trip_token', resData.session_token);
             } catch (err) {}
           }
         } else {
-          alert(resData.error || "Error al solicitar el viaje");
+          alert(resData.error || "Error al solicitar el mandado");
           card.classList.add('hidden');
           return;
         }
@@ -745,14 +748,15 @@
         console.log("Modo local/simulado activo:", e);
       }
 
-      // Añadir a lista de conductor local
+      // Añadir a lista de repartidor local
       const nuevoViaje = {
-        id: estado.viajeActivoId || ('CP-' + Math.floor(100 + Math.random() * 900)),
+        id: estado.viajeActivoId || ('MD-' + Math.floor(100 + Math.random() * 900)),
         pasajero_nombre: cliente,
         origen: origen,
         destino: destino,
+        paquete: paquete,
         tarifa: tarifa,
-        tipo: estado.tipoServicio,
+        tipo: 'mandado',
         tiempo: 'Ahora mismo'
       };
       estado.viajesDisponibles.unshift(nuevoViaje);
@@ -762,20 +766,20 @@
         if (card.classList.contains('hidden')) return;
         radar.classList.add('hidden');
         details.classList.remove('hidden');
-        badge.innerHTML = `<i class="fa-solid fa-check"></i> CAPONERA ASIGNADA`;
+        badge.innerHTML = `<i class="fa-solid fa-check"></i> REPARTIDOR ASIGNADO`;
         badge.className = 'text-[11px] font-black px-3 py-1 rounded-full bg-emerald-500 text-slate-950 flex items-center gap-1.5 shadow';
         
-        document.getElementById('driverName').innerText = "José Ramón";
-        document.getElementById('driverUnit').innerText = "Unidad #7 · Caponera Express";
+        document.getElementById('driverName').innerText = "Carlos Ruiz";
+        document.getElementById('driverUnit').innerText = "Unidad #1 · Moto Reparto Express";
         
-        const waMsg = encodeURIComponent(`Hola José Ramón, soy ${cliente}, pedí su caponera desde ${origen} hacia ${destino}.`);
+        const waMsg = encodeURIComponent(`Hola Carlos Ruiz, soy ${cliente}, solicité un mandado desde ${origen} hacia ${destino} (${paquete}).`);
         document.getElementById('waContactBtn').href = `https://wa.me/50589130414?text=${waMsg}`;
       }, 3500);
     }
 
     async function cancelarViaje() {
       if (estado.viajeActivoId) {
-        const token = localStorage.getItem(`caponera_token_${estado.viajeActivoId}`) || localStorage.getItem('caponera_active_trip_token') || '';
+        const token = localStorage.getItem(`mandados_token_${estado.viajeActivoId}`) || localStorage.getItem('mandados_active_trip_token') || '';
         try {
           await fetch(`/api/viajes/${estado.viajeActivoId}/cancelar`, {
             method: 'POST',
@@ -786,7 +790,7 @@
             body: JSON.stringify({ viaje_id: estado.viajeActivoId, session_token: token })
           });
           try {
-            localStorage.removeItem(`caponera_token_${estado.viajeActivoId}`);
+            localStorage.removeItem(`mandados_token_${estado.viajeActivoId}`);
           } catch(err) {}
         } catch(e){}
       }
@@ -794,7 +798,7 @@
     }
 
     function simularFinalizar() {
-      alert('¡Viaje completado con éxito! Gracias por usar CaponeraApp.');
+      alert('¡Mandado completado y entregado con éxito! Gracias por usar Mandados App.');
       cancelarViaje();
     }
 
