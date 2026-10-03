@@ -147,10 +147,17 @@
           </div>
         </div>
 
-        <div>
-          <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Nombre o contacto que solicita/recibe</label>
-          <input id="inputPassengerName" type="text" placeholder="Tu nombre" value="Luis Aguilar"
-            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Nombre o contacto</label>
+            <input id="inputPassengerName" type="text" placeholder="Tu nombre" value="Luis Aguilar"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+          </div>
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">WhatsApp contacto</label>
+            <input id="inputPassengerPhone" type="tel" placeholder="Ej: 89130414" value="50589130414"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+          </div>
         </div>
 
         <!-- Botón Solicitar Mandado -->
@@ -205,6 +212,14 @@
             <button onclick="simularFinalizar()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 px-3 rounded-xl text-xs transition active:scale-95">
               <i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> Entregado
             </button>
+          </div>
+          <!-- Reportar Problema (M7-4) -->
+          <div class="pt-2 border-t border-slate-800/80 flex justify-between items-center text-[11px]">
+            <span class="text-slate-400">¿Inconveniente con el mandado?</span>
+            <a id="btnReportIssue" href="https://wa.me/50589130414?text=Reporte%20problema%20mandado" target="_blank"
+               class="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 transition">
+              <i class="fa-solid fa-triangle-exclamation"></i> Reportar Problema
+            </a>
           </div>
         </div>
       </div>
@@ -464,6 +479,80 @@
       </div>
     </div>
 
+    <!-- Modal Registro Obligatorio de Repartidor (M7-1) -->
+    <div id="driverRegisterModal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+      <div class="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-3.5 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-sm font-black border border-sky-500/30">
+              <i class="fa-solid fa-motorcycle"></i>
+            </span>
+            <div>
+              <h3 class="font-black text-sm text-white">Registro de Repartidor</h3>
+              <p class="text-[10px] text-emerald-400 font-bold">Activación Inmediata · Sin Espera Manual</p>
+            </div>
+          </div>
+          <button onclick="cerrarRegistroRepartidor()" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div id="driverRegisterForm" class="space-y-3 text-xs">
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Nombre Completo</label>
+            <input id="regDriverName" type="text" placeholder="Ej: Carlos Ruiz"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+          </div>
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">N° de Cédula de Identidad</label>
+            <input id="regDriverCedula" type="text" placeholder="Ej: 001-280590-0001A"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+            <span class="text-[9px] text-slate-500">Nunca pública. Solo para trazabilidad y auditoría de casos.</span>
+          </div>
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">WhatsApp de Contacto</label>
+            <input id="regDriverPhone" type="tel" placeholder="Ej: 89130414"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+          </div>
+          <div>
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Moto / Número de Placa</label>
+            <input id="regDriverPlate" type="text" placeholder="Ej: MY-10293"
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400 transition" />
+          </div>
+          <div class="p-3 bg-slate-950 rounded-2xl border border-slate-800/80 space-y-1.5">
+            <label class="flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer">
+              <input id="regDriverRules" type="checkbox" class="mt-0.5 rounded text-sky-500 focus:ring-0 bg-slate-900 border-slate-700" />
+              <span>Acepto las <strong>Reglas del Encargo</strong> (intermediación técnica, cumplimiento de normas viales y cuidado del paquete).</span>
+            </label>
+          </div>
+          <button onclick="enviarRegistroRepartidor()" class="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
+            Completar Registro y Activar
+          </button>
+          <div class="text-center pt-1 border-t border-slate-800">
+            <button onclick="mostrarIngresoToken()" class="text-[10px] text-slate-400 hover:text-sky-400 underline">¿Ya tienes un PIN/Token de repartidor? Ingresar clave</button>
+          </div>
+        </div>
+
+        <!-- Vista Token Creado (Mostrado UNA SOLA VEZ) -->
+        <div id="driverTokenDisplay" class="hidden space-y-3 text-xs">
+          <div class="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl space-y-2">
+            <div class="flex items-center gap-1.5 text-emerald-400 font-extrabold text-xs">
+              <i class="fa-solid fa-circle-check"></i> ¡REGISTRO COMPLETADO!
+            </div>
+            <p class="text-[11px] text-slate-300">Este es tu <strong>PIN / Token secreto de repartidor</strong>. Guárdalo bien; es la llave de tu teléfono y <strong>NO se volverá a mostrar</strong>:</p>
+            <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs font-mono text-emerald-300 font-bold flex justify-between items-center select-all">
+              <span id="createdDriverToken">MD-DRV-...</span>
+              <button onclick="copiarTokenCreado()" class="text-[10px] text-sky-400 hover:underline">Copiar</button>
+            </div>
+            <p class="text-[10px] text-slate-500">Tu cuenta está activa inmediatamente. El operador puede suspenderla ante disputas graves.</p>
+          </div>
+          <button onclick="entrarModoRepartidor()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
+            ¡Entendido! Entrar a Modo Repartidor
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ============================================================== -->
@@ -586,6 +675,14 @@
     }
 
     function cambiarRol(rol) {
+      if (rol === 'conductor') {
+        const driverToken = localStorage.getItem('mandados_driver_token');
+        if (!driverToken) {
+          document.getElementById('driverRegisterModal').classList.remove('hidden');
+          return;
+        }
+      }
+
       estado.rolActual = rol;
       const viewPasajero = document.getElementById('viewPassenger');
       const viewConductor = document.getElementById('viewDriver');
@@ -595,15 +692,102 @@
       if (rol === 'pasajero') {
         viewPasajero.classList.remove('hidden');
         viewConductor.classList.add('hidden');
-        btnPasajero.className = 'px-3 py-1.5 rounded-xl bg-slate-950 text-amber-400 shadow-md transition-all';
+        btnPasajero.className = 'px-3 py-1.5 rounded-xl bg-slate-950 text-sky-400 shadow-md transition-all';
         btnConductor.className = 'px-3 py-1.5 rounded-xl text-slate-950 hover:text-white transition-all';
         setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 200);
       } else {
         viewPasajero.classList.add('hidden');
         viewConductor.classList.remove('hidden');
-        btnConductor.className = 'px-3 py-1.5 rounded-xl bg-slate-950 text-amber-400 shadow-md transition-all';
+        btnConductor.className = 'px-3 py-1.5 rounded-xl bg-slate-950 text-sky-400 shadow-md transition-all';
         btnPasajero.className = 'px-3 py-1.5 rounded-xl text-slate-950 hover:text-white transition-all';
         cargarFeedConductor();
+      }
+    }
+
+    function cerrarRegistroRepartidor() {
+      document.getElementById('driverRegisterModal').classList.add('hidden');
+      cambiarRol('pasajero');
+    }
+
+    async function enviarRegistroRepartidor() {
+      const nombre = (document.getElementById('regDriverName')?.value || '').trim();
+      const cedula = (document.getElementById('regDriverCedula')?.value || '').trim();
+      const telefono = (document.getElementById('regDriverPhone')?.value || '').trim();
+      const placa = (document.getElementById('regDriverPlate')?.value || '').trim();
+      const reglas = document.getElementById('regDriverRules')?.checked;
+
+      if (!reglas) {
+        alert('Debes aceptar las Reglas del Encargo para registrarte.');
+        return;
+      }
+      if (nombre.length < 3) {
+        alert('Por favor ingresa tu nombre completo (mínimo 3 letras).');
+        return;
+      }
+      if (!cedula) {
+        alert('Por favor ingresa tu número de cédula.');
+        return;
+      }
+      if (!telefono) {
+        alert('Por favor ingresa tu número de WhatsApp.');
+        return;
+      }
+      if (!placa) {
+        alert('Por favor ingresa tu placa o identificación de vehículo.');
+        return;
+      }
+
+      try {
+        const resp = await fetch('/api/conductor/registro', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: nombre,
+            cedula: cedula,
+            telefono: telefono,
+            placa: placa,
+            reglas_aceptadas: true
+          })
+        });
+        const res = await resp.json();
+        if (resp.status === 201 && res.success) {
+          localStorage.setItem('mandados_driver_token', res.driver_token);
+          localStorage.setItem('mandados_driver_id', res.conductor_id);
+          localStorage.setItem('mandados_driver_name', res.nombre);
+          
+          document.getElementById('createdDriverToken').innerText = res.driver_token;
+          document.getElementById('driverRegisterForm').classList.add('hidden');
+          document.getElementById('driverTokenDisplay').classList.remove('hidden');
+        } else {
+          alert(res.error || 'Error al completar el registro.');
+        }
+      } catch (err) {
+        alert('Error de conexión al registrar. Inténtalo de nuevo.');
+      }
+    }
+
+    function copiarTokenCreado() {
+      const tok = document.getElementById('createdDriverToken').innerText;
+      navigator.clipboard.writeText(tok).then(() => {
+        alert('¡PIN / Token de repartidor copiado al portapapeles!');
+      }).catch(() => {
+        alert('Token: ' + tok);
+      });
+    }
+
+    function entrarModoRepartidor() {
+      document.getElementById('driverRegisterModal').classList.add('hidden');
+      document.getElementById('driverRegisterForm').classList.remove('hidden');
+      document.getElementById('driverTokenDisplay').classList.add('hidden');
+      cambiarRol('conductor');
+    }
+
+    function mostrarIngresoToken() {
+      const token = prompt('Ingresa tu PIN/Token secreto de repartidor (ej. MD-DRV-...):');
+      if (token && token.trim()) {
+        localStorage.setItem('mandados_driver_token', token.trim());
+        alert('¡Token guardado exitosamente!');
+        entrarModoRepartidor();
       }
     }
 
@@ -639,6 +823,7 @@
       const destino = document.getElementById('inputDestination').value.trim();
       const paquete = (document.getElementById('inputPackageDesc')?.value || '').trim() || 'Mandado estándar';
       const cliente = document.getElementById('inputPassengerName').value.trim() || 'Cliente';
+      const clienteTel = (document.getElementById('inputPassengerPhone')?.value || '').trim() || '50589130414';
       const tarifa = parseInt(document.getElementById('inputFare').value) || 35;
 
       if (!origen || !destino) {
@@ -669,6 +854,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             pasajero_nombre: cliente,
+            cliente_telefono: clienteTel,
             origen: origen,
             destino: destino,
             paquete_desc: paquete,
@@ -680,6 +866,10 @@
         const resData = await resp.json();
         if (resData.success) {
           estado.viajeActivoId = resData.viaje_id;
+          const btnReport = document.getElementById('btnReportIssue');
+          if (btnReport) {
+            btnReport.href = `https://wa.me/50589130414?text=${encodeURIComponent('Reporte de problema mandado #' + estado.viajeActivoId)}`;
+          }
           if (resData.session_token) {
             try {
               localStorage.setItem(`mandados_token_${estado.viajeActivoId}`, resData.session_token);
@@ -764,10 +954,27 @@
     async function cargarFeedConductor() {
       const feed = document.getElementById('driverFeed');
       const counter = document.getElementById('requestsCount');
-      
-      // Intentar traer del backend
+      const token = localStorage.getItem('mandados_driver_token') || '';
+      const driverId = localStorage.getItem('mandados_driver_id') || '';
+
+      const headers = {};
+      if (token) headers['X-Driver-Token'] = token;
+
       try {
-        const resp = await fetch('/api/conductor/viajes_pendientes');
+        let url = '/api/conductor/viajes_pendientes';
+        if (driverId) url += `?conductor_id=${driverId}`;
+        const resp = await fetch(url, { headers });
+        if (resp.status === 403) {
+          const errData = await resp.json().catch(() => ({}));
+          feed.innerHTML = `
+            <div class="p-6 text-center text-rose-400 text-xs border border-rose-800 bg-rose-950/30 rounded-3xl">
+              <i class="fa-solid fa-ban text-2xl mb-2 block"></i>
+              <strong>ACCESO DENEGADO</strong><br>
+              ${errData.error || 'Cuenta suspendida o clave de repartidor no válida'}.
+            </div>`;
+          counter.innerText = 'Suspendido';
+          return;
+        }
         const data = await resp.json();
         if (data.carreras && data.carreras.length > 0) {
           estado.viajesDisponibles = data.carreras;
@@ -818,7 +1025,7 @@
 
           <div class="flex gap-2 pt-2 border-t border-slate-800/80">
             <button onclick="aceptarViajeConductor(${index})" class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2 rounded-xl text-xs transition shadow active:scale-95">
-              Aceptar Carrera
+              Aceptar Mandado
             </button>
             <button onclick="descartarViaje(${index})" class="px-3.5 bg-slate-950 border border-slate-800 text-slate-400 hover:text-white rounded-xl text-xs transition active:scale-95">
               Ignorar
@@ -831,16 +1038,25 @@
 
     async function aceptarViajeConductor(index) {
       const v = estado.viajesDisponibles[index];
+      const token = localStorage.getItem('mandados_driver_token') || '';
+      const driverId = parseInt(localStorage.getItem('mandados_driver_id')) || 1;
       if (v.id) {
         try {
-          await fetch(`/api/viajes/${v.id}/aceptar`, {
+          const headers = {'Content-Type': 'application/json'};
+          if (token) headers['X-Driver-Token'] = token;
+          const resp = await fetch(`/api/viajes/${v.id}/aceptar`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ conductor_id: 1 })
+            headers: headers,
+            body: JSON.stringify({ conductor_id: driverId })
           });
+          if (resp.status === 403) {
+            const errData = await resp.json().catch(() => ({}));
+            alert(errData.error || "Acceso denegado: cuenta suspendida o no autorizada.");
+            return;
+          }
         } catch(e) {}
       }
-      alert(`¡Carrera aceptada para ${v.pasajero_nombre || v.cliente}! Dirígete a: ${v.origen}. Tarifa: C$ ${v.tarifa}`);
+      alert(`¡Mandado aceptado para ${v.pasajero_nombre || v.cliente}! Dirígete a: ${v.origen}. Tarifa: C$ ${v.tarifa}`);
       estado.viajesDisponibles.splice(index, 1);
       cargarFeedConductor();
     }
