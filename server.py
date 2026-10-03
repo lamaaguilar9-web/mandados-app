@@ -14,32 +14,35 @@ from flask import Flask, request, jsonify, send_from_directory, render_template_
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "caponera.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "mandados.db")
 
 # =========================================================
-# CORS HEADER (REQUERIDO PARA CAPONERA-APP.SURGE.SH)
+# CORS HEADER (PERMITE ACCESO MULTI-ORIGEN SEGURO)
 # =========================================================
 @app.after_request
 def add_cors(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-Driver-Token,X-Session-Token,X-Admin-Key"
     response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
 # =========================================================
-# RATE LIMITING & TTL DE VIAJES (CA-6)
+# RATE LIMITING ANTI-SPOOFING & TTL DE MANDADOS
 # =========================================================
 def get_client_ip() -> str:
+    # 1. Si nginx está configurado con proxy_set_header X-Real-IP $remote_addr, esta cabecera es confiable
     real_ip = request.headers.get("X-Real-IP", "").strip()
     if real_ip:
         return real_ip
 
+    # 2. Si solo hay XFF, tomamos el ÚLTIMO hop confiable (servidor adyacente), NUNCA el primero falsificable
     xff = request.headers.get("X-Forwarded-For", "").strip()
     if xff:
         parts = [p.strip() for p in xff.split(",") if p.strip()]
         if parts:
             return parts[-1]
 
+    # 3. Fallback directo a la dirección de socket local
     return request.remote_addr or "127.0.0.1"
 
 class InMemoryRateLimiter:
@@ -65,9 +68,9 @@ viaje_rate_limiter = InMemoryRateLimiter(max_requests=5, window_sec=60)
 recarga_rate_limiter = InMemoryRateLimiter(max_requests=5, window_sec=60)
 
 def purge_expired_trips():
-    """Barre viajes en estado 'buscando' que superan el TTL y los marca como 'expirado' (CA-6)."""
+    """Barre encargos en estado 'buscando' que superan el TTL y los marca como 'expirado'."""
     try:
-        ttl_sec = int(os.getenv("CAPONERA_VIAJE_TTL_SEC", "900"))
+        ttl_sec = int(os.getenv("MANDADOS_VIAJE_TTL_SEC", "900"))
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -128,7 +131,7 @@ def init_db():
     with get_db() as conn:
         cursor = conn.cursor()
         
-        # 1. Conductores
+        # 1. Repartidores / Conductores
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS conductores (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,22 +159,20 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
-        # Marcar conductores demo existentes
-        cursor.execute("UPDATE conductores SET is_demo = 1 WHERE telefono IN ('50589130414', '50588881111', '50588882222')")
-
-        # Generar driver_token para conductores existentes que no lo tengan
+        # Generar driver_token para repartidores existentes sin token
         cursor.execute("SELECT id FROM conductores WHERE driver_token IS NULL OR driver_token = ''")
         for row in cursor.fetchall():
             cursor.execute("UPDATE conductores SET driver_token = ? WHERE id = ?", (secrets.token_hex(16), row["id"]))
         
-        # 2. Viajes
+        # 2. Mandados / Encargos (Viajes)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS viajes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_token TEXT,
-                pasajero_nombre TEXT DEFAULT 'Pasajero Express',
+                pasajero_nombre TEXT DEFAULT 'Cliente',
                 origen TEXT NOT NULL,
                 destino TEXT NOT NULL,
+                paquete_desc TEXT DEFAULT '',
                 tarifa REAL NOT NULL,
                 lat_origen REAL,
                 lng_origen REAL,
@@ -184,6 +185,11 @@ def init_db():
         """)
         try:
             cursor.execute("ALTER TABLE viajes ADD COLUMN session_token TEXT;")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE viajes ADD COLUMN paquete_desc TEXT DEFAULT '';")
         except sqlite3.OperationalError:
             pass
         
@@ -212,14 +218,14 @@ def init_db():
             )
         """)
         
-        # Insertar conductores iniciales si la tabla está vacía Y CAPONERA_SEED_DEMO == "1"
+        # Insertar repartidores iniciales si la tabla está vacía Y MANDADOS_SEED_DEMO == "1"
         cursor.execute("SELECT COUNT(*) FROM conductores")
-        if cursor.fetchone()[0] == 0 and os.getenv("CAPONERA_SEED_DEMO", "0") == "1":
+        if cursor.fetchone()[0] == 0 and os.getenv("MANDADOS_SEED_DEMO", "0") == "1":
             exp_date = (datetime.datetime.now() + datetime.timedelta(days=15)).strftime("%Y-%m-%d")
             initial_drivers = [
-                ("José Ramón", "50589130414", "Unidad #7 · Caponera Express", secrets.token_hex(16), 12.1370, -86.2520, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
-                ("Alex Mendoza", "50588881111", "Caponera #14 (Tarifa Básica)", secrets.token_hex(16), 12.1390, -86.2490, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
-                ("María González", "50588882222", "Moto Taxi #09", secrets.token_hex(16), 12.1340, -86.2540, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1)
+                ("Carlos Ruiz", "50589130414", "Unidad #1 · Moto Reparto Express", secrets.token_hex(16), 12.1370, -86.2520, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
+                ("Kevin Morales", "50588881111", "Unidad #4 · Mensajería Ágil", secrets.token_hex(16), 12.1390, -86.2490, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1),
+                ("Pedro Dávila", "50588882222", "Unidad #9 · Moto Envíos", secrets.token_hex(16), 12.1340, -86.2540, 1, 1, "Pionero (15 Días Gratis)", exp_date, 1)
             ]
             cursor.executemany("""
                 INSERT INTO conductores (nombre, telefono, unidad, driver_token, lat, lng, is_online, plan_activo, plan_nombre, plan_expira, is_demo)
@@ -243,15 +249,9 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
         return 1.0
 
 # =========================================================
-# AUTENTICACIÓN DEL LADO CONDUCTOR (CA-2)
+# AUTENTICACIÓN DEL REPARTIDOR (TOKEN EN TIEMPO CONSTANTE)
 # =========================================================
 def get_authenticated_driver(expected_conductor_id=None):
-    """
-    Autentica al conductor mediante el header X-Driver-Token en tiempo constante (CA-2).
-    Si expected_conductor_id es provisto, valida que el token pertenezca exactamente a ese conductor.
-    Si expected_conductor_id no es provisto, busca el conductor asociado al token.
-    Retorna (driver_dict, None) si es válido, o (None, (error_response, 403)).
-    """
     token = request.headers.get("X-Driver-Token", "").strip()
     if not token:
         return None, (jsonify({"success": False, "error": "Autenticación requerida: Header X-Driver-Token ausente"}), 403)
@@ -283,9 +283,10 @@ def index():
     try:
         ip = get_client_ip()
         ua = request.headers.get('User-Agent', '')[:255]
-        ref = (request.referrer or '')[:255]
+        ref = request.headers.get('Referer', '')[:255]
         with get_db() as conn:
-            conn.cursor().execute("INSERT INTO visitas (ip, user_agent, origen_url) VALUES (?, ?, ?)", (ip, ua, ref))
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO visitas (ip, user_agent, origen_url) VALUES (?, ?, ?)", (ip, ua, ref))
             conn.commit()
     except Exception:
         pass
@@ -302,6 +303,14 @@ def service_worker():
 def get_app_version():
     if os.getenv("APP_VERSION"):
         return os.getenv("APP_VERSION")
+    if os.path.exists("version.txt"):
+        try:
+            with open("version.txt", "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    return content
+        except Exception:
+            pass
     try:
         import subprocess
         ver = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode("utf-8").strip()
@@ -309,24 +318,19 @@ def get_app_version():
             return ver
     except Exception:
         pass
-    if os.path.exists("version.txt"):
-        try:
-            with open("version.txt", "r", encoding="utf-8") as f:
-                return f.read().strip()
-        except Exception:
-            pass
-    return "1.0.0-hardened"
+    return "1.0.0-mandados-r1"
 
 @app.route("/api/version", methods=["GET"])
 @app.route("/health", methods=["GET"])
 def get_version():
     return jsonify({
-        "app": "caponera-app",
+        "app": "mandados-app",
         "version": get_app_version(),
         "status": "healthy"
     })
 
 @app.route("/privacidad")
+@app.route("/privacidad.html")
 def privacy_page():
     return send_from_directory(".", "privacidad.html")
 
@@ -339,50 +343,41 @@ def static_files(filename):
 # =========================================================
 @app.route("/api/stream")
 def sse_stream():
-    """Canal continuo SSE con heartbeat periódico (20s) y auto-purga de conexiones muertas."""
-    def event_generator():
-        client_queue = event_bus.subscribe()
+    def event_stream():
+        q = event_bus.subscribe()
         try:
-            yield f"event: ping\ndata: {json.dumps({'time': datetime.datetime.now().isoformat()})}\n\n"
+            yield "event: ping\ndata: {\"status\":\"connected\"}\n\n"
             while True:
                 try:
-                    # Timeout de 20s para despachar heartbeat activo
-                    msg = client_queue.get(timeout=20.0)
+                    msg = q.get(timeout=25)
                     yield msg
                 except queue.Empty:
-                    # Heartbeat activo: detecta inmediatamente desconexiones del cliente
-                    yield f": heartbeat {datetime.datetime.now().isoformat()}\n\n"
-        except (GeneratorExit, BrokenPipeError, ConnectionResetError, Exception):
-            pass
-        finally:
-            event_bus.unsubscribe(client_queue)
+                    yield "event: ping\ndata: {\"heartbeat\": true}\n\n"
+        except GeneratorExit:
+            event_bus.unsubscribe(q)
 
-    return Response(
-        event_generator(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive"
-        }
-    )
+    return Response(event_stream(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive"
+    })
 
 # =========================================================
-# RUTAS API: CONFIGURACIÓN Y CIUDAD OPERATIVA (CA-9)
+# RUTAS API: CONFIGURACIÓN Y SERVICIO
 # =========================================================
 @app.route("/api/config", methods=["GET"])
 def get_config():
-    ciudad = os.getenv("CAPONERA_CIUDAD", "Masaya")
+    ciudad = os.getenv("MANDADOS_CIUDAD", "Masaya")
     try:
-        tarifa_min = float(os.getenv("CAPONERA_TARIFA_MIN", "15.0"))
+        tarifa_min = float(os.getenv("MANDADOS_TARIFA_MIN", "20.0"))
     except ValueError:
-        tarifa_min = 15.0
+        tarifa_min = 20.0
     try:
-        tarifa_max = float(os.getenv("CAPONERA_TARIFA_MAX", "250.0"))
+        tarifa_max = float(os.getenv("MANDADOS_TARIFA_MAX", "300.0"))
     except ValueError:
-        tarifa_max = 250.0
+        tarifa_max = 300.0
 
-    zonas_env = os.getenv("CAPONERA_ZONAS", "")
+    zonas_env = os.getenv("MANDADOS_ZONAS", "")
     if zonas_env:
         zonas = [z.strip() for z in zonas_env.split(",") if z.strip()]
     else:
@@ -402,64 +397,51 @@ def get_config():
     })
 
 # =========================================================
-# RUTAS API: CONDUCTORES
+# RUTAS API: REPARTIDORES / CONDUCTORES
 # =========================================================
 @app.route("/api/conductores", methods=["GET"])
 @app.route("/api/conductores/activos", methods=["GET"])
 def get_conductores():
     lat = request.args.get("lat", type=float)
     lng = request.args.get("lng", type=float)
-    seed_demo = os.getenv("CAPONERA_SEED_DEMO", "0") == "1"
+    seed_demo = os.getenv("MANDADOS_SEED_DEMO", "0") == "1"
     
     with get_db() as conn:
         cursor = conn.cursor()
-        query = """
-            SELECT id, nombre, unidad, lat, lng, is_online, plan_activo, plan_expira, is_demo 
-            FROM conductores 
-            WHERE is_online = 1 
-              AND plan_activo = 1
-              AND (plan_expira IS NULL OR date(plan_expira) >= date('now'))
-        """
-        if not seed_demo:
-            query += " AND (is_demo IS NULL OR is_demo = 0)"
-
-        cursor.execute(query)
+        
+        if seed_demo:
+            query = "SELECT id, nombre, unidad, lat, lng, is_online, updated_at FROM conductores WHERE is_online = 1"
+            cursor.execute(query)
+        else:
+            query = "SELECT id, nombre, unidad, lat, lng, is_online, updated_at FROM conductores WHERE is_online = 1 AND is_demo = 0"
+            cursor.execute(query)
+            
         rows = cursor.fetchall()
         
-    conductores = []
+    drivers = []
     for r in rows:
-        d = {
-            "id": r["id"],
-            "nombre": r["nombre"],
-            "unidad": r["unidad"],
-            "lat": r["lat"],
-            "lng": r["lng"],
-            "is_online": r["is_online"],
-            "plan_activo": r["plan_activo"]
-        }
+        d = dict(r)
         if lat is not None and lng is not None and d["lat"] is not None and d["lng"] is not None:
-            dist_km = calculate_distance(lat, lng, d["lat"], d["lng"])
-            d["distancia_km"] = round(dist_km, 2)
-            d["tiempo_llegada_min"] = max(2, int(dist_km * 4))
+            d["distancia_km"] = calculate_distance(lat, lng, d["lat"], d["lng"])
         else:
-            d["distancia_km"] = 0.5
-            d["tiempo_llegada_min"] = 3
-        conductores.append(d)
+            d["distancia_km"] = None
+        drivers.append(d)
         
-    conductores.sort(key=lambda x: x.get("distancia_km", 0))
-    
-    # Si la petición viene de app.js clásico espera array directo, si viene de nueva versión espera dict
-    if request.path == "/api/conductores/activos":
-        return jsonify(conductores)
-    return jsonify({"success": True, "conductores": conductores})
+    if lat is not None and lng is not None:
+        drivers.sort(key=lambda x: (x["distancia_km"] if x["distancia_km"] is not None else 999))
+        
+    return jsonify(drivers)
 
-@app.route("/api/conductor/ubicacion", methods=["POST"])
-@app.route("/api/conductor/<int:conductor_id>/posicion", methods=["POST"])
-def update_posicion(conductor_id=None):
+@app.route("/api/conductor/posicion", methods=["POST"])
+def actualizar_posicion_conductor():
     data = request.get_json(silent=True) or {}
-    
-    if conductor_id is None:
-        conductor_id = data.get("conductor_id")
+    raw_cid = data.get("conductor_id")
+    conductor_id = None
+    if raw_cid is not None:
+        try:
+            conductor_id = int(raw_cid)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "ID de conductor inválido"}), 400
         
     driver, auth_err = get_authenticated_driver(conductor_id)
     if auth_err:
@@ -483,7 +465,6 @@ def update_posicion(conductor_id=None):
         """, (lat, lng, is_online, conductor_id))
         conn.commit()
 
-    # Difusión en tiempo real por SSE
     event_bus.publish("conductor_movimiento", {
         "conductor_id": conductor_id,
         "lat": lat,
@@ -494,20 +475,20 @@ def update_posicion(conductor_id=None):
     return jsonify({"success": True, "mensaje": "Posición actualizada"})
 
 # =========================================================
-# RUTAS API: VIAJES Y ASIGNACIÓN ATÓMICA
+# RUTAS API: MANDADOS Y ASIGNACIÓN ATÓMICA
 # =========================================================
 @app.route("/api/viajes/crear", methods=["POST"])
 @app.route("/api/viajes/solicitar", methods=["POST"])
 def solicitar_viaje():
     client_ip = get_client_ip()
     if not viaje_rate_limiter.is_allowed(client_ip):
-        return jsonify({"success": False, "error": "Demasiadas solicitudes. Límite de creación de viajes excedido por IP (HTTP 429)"}), 429
+        return jsonify({"success": False, "error": "Demasiadas solicitudes. Límite de creación de mandados excedido por IP (HTTP 429)"}), 429
 
     data = request.get_json(silent=True) or {}
-    pasajero = str(data.get("pasajero_nombre", "Pasajero Express"))[:100]
-    origen = str(data.get("origen", "Punto Actual"))[:150]
-    destino = str(data.get("destino", "Destino Indicado"))[:150]
-    # Token criptográfico de sesión para autorización de cancelación (Cero IDOR)
+    pasajero = str(data.get("pasajero_nombre") or data.get("cliente") or "Cliente Express")[:100]
+    origen = str(data.get("origen", "Punto de Recogida"))[:150]
+    destino = str(data.get("destino", "Punto de Entrega"))[:150]
+    paquete = str(data.get("paquete_desc") or data.get("descripcion") or data.get("paquete") or "Mandado estándar")[:200]
     session_token = str(data.get("session_token") or os.urandom(16).hex())
     
     try:
@@ -518,13 +499,13 @@ def solicitar_viaje():
         return jsonify({"success": False, "error": "Parámetros inválidos"}), 400
 
     try:
-        tarifa_min = float(os.getenv("CAPONERA_TARIFA_MIN", "15.0"))
+        tarifa_min = float(os.getenv("MANDADOS_TARIFA_MIN", "20.0"))
     except ValueError:
-        tarifa_min = 15.0
+        tarifa_min = 20.0
     try:
-        tarifa_max = float(os.getenv("CAPONERA_TARIFA_MAX", "250.0"))
+        tarifa_max = float(os.getenv("MANDADOS_TARIFA_MAX", "300.0"))
     except ValueError:
-        tarifa_max = 250.0
+        tarifa_max = 300.0
 
     if tarifa < tarifa_min or tarifa > tarifa_max:
         return jsonify({
@@ -532,22 +513,21 @@ def solicitar_viaje():
             "error": f"Tarifa fuera de rango. Debe estar entre C$ {tarifa_min:.0f} y C$ {tarifa_max:.0f}"
         }), 400
 
-    
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO viajes (session_token, pasajero_nombre, origen, destino, tarifa, lat_origen, lng_origen, estado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'buscando')
-        """, (session_token, pasajero, origen, destino, tarifa, lat_o, lng_o))
+            INSERT INTO viajes (session_token, pasajero_nombre, origen, destino, paquete_desc, tarifa, lat_origen, lng_origen, estado)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'buscando')
+        """, (session_token, pasajero, origen, destino, paquete, tarifa, lat_o, lng_o))
         viaje_id = cursor.lastrowid
         conn.commit()
 
-    # Notificar a los conductores conectados en vivo
     event_bus.publish("nuevo_viaje", {
         "viaje_id": viaje_id,
         "pasajero": pasajero,
         "origen": origen,
         "destino": destino,
+        "paquete": paquete,
         "tarifa": tarifa,
         "lat": lat_o,
         "lng": lng_o
@@ -558,7 +538,7 @@ def solicitar_viaje():
         "viaje_id": viaje_id,
         "session_token": session_token,
         "estado": "buscando",
-        "mensaje": "Buscando caponera cercana..."
+        "mensaje": "Buscando repartidor cercano..."
     })
 
 @app.route("/api/viajes/<int:viaje_id>/estado", methods=["GET"])
@@ -573,7 +553,7 @@ def get_estado_viaje(viaje_id):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT v.id, v.session_token, v.estado, v.tarifa, v.origen, v.destino, v.conductor_id,
+            SELECT v.id, v.session_token, v.estado, v.tarifa, v.origen, v.destino, v.paquete_desc, v.conductor_id,
                    c.id as cond_id, c.nombre as conductor_nombre, c.telefono as conductor_telefono, c.unidad as conductor_unidad
             FROM viajes v
             LEFT JOIN conductores c ON v.conductor_id = c.id
@@ -582,11 +562,11 @@ def get_estado_viaje(viaje_id):
         row = cursor.fetchone()
         
     if not row:
-        return jsonify({"success": False, "error": "Viaje no encontrado"}), 404
+        return jsonify({"success": False, "error": "Mandado no encontrado"}), 404
 
     reg_token = (row["session_token"] or "").strip()
     if not token or not reg_token or not hmac.compare_digest(token, reg_token):
-        return jsonify({"success": False, "error": "UNAUTHORIZED: Token de sesión requerido o inválido para consultar estado del viaje"}), 403
+        return jsonify({"success": False, "error": "UNAUTHORIZED: Token de sesión requerido o inválido para consultar estado del mandado"}), 403
     
     conductor_obj = None
     if row["conductor_id"]:
@@ -603,6 +583,7 @@ def get_estado_viaje(viaje_id):
         "tarifa": row["tarifa"],
         "origen": row["origen"],
         "destino": row["destino"],
+        "paquete": row["paquete_desc"],
         "conductor_id": row["conductor_id"],
         "conductor_nombre": row["conductor_nombre"],
         "conductor_telefono": row["conductor_telefono"],
@@ -620,7 +601,7 @@ def cancelar_viaje(viaje_id=None):
         viaje_id = data.get("viaje_id") or data.get("id")
 
     if not viaje_id:
-        return jsonify({"success": False, "error": "ID de viaje requerido"}), 400
+        return jsonify({"success": False, "error": "ID de mandado requerido"}), 400
 
     token = (
         request.headers.get("X-Session-Token")
@@ -639,12 +620,11 @@ def cancelar_viaje(viaje_id=None):
         cursor.execute("SELECT session_token FROM viajes WHERE id = ?", (viaje_id,))
         row = cursor.fetchone()
         if not row:
-            return jsonify({"success": False, "error": "Viaje no encontrado"}), 404
+            return jsonify({"success": False, "error": "Mandado no encontrado"}), 404
 
         reg_token = (row["session_token"] or "").strip()
-        # Control de Autorización estricto (Anti-IDOR) en tiempo constante
         if not reg_token or not hmac.compare_digest(token, reg_token):
-            return jsonify({"success": False, "error": "UNAUTHORIZED: Token de sesión no coincide con el emisor del viaje"}), 403
+            return jsonify({"success": False, "error": "UNAUTHORIZED: Token de sesión no coincide con el emisor del mandado"}), 403
 
         cursor.execute("""
             UPDATE viajes 
@@ -654,7 +634,7 @@ def cancelar_viaje(viaje_id=None):
         conn.commit()
 
     event_bus.publish("viaje_cancelado", {"viaje_id": viaje_id})
-    return jsonify({"success": True, "mensaje": "Viaje cancelado exitosamente"})
+    return jsonify({"success": True, "mensaje": "Mandado cancelado exitosamente"})
 
 @app.route("/api/conductor/viajes_pendientes", methods=["GET"])
 @app.route("/api/conductor/viajes-pendientes", methods=["GET"])
@@ -682,6 +662,7 @@ def get_viajes_pendientes():
                 "pasajero": r["pasajero_nombre"],
                 "origen": r["origen"],
                 "destino": r["destino"],
+                "paquete": r["paquete_desc"],
                 "tarifa": r["tarifa"],
                 "distancia_km": dist_km,
                 "created_at": r["created_at"]
@@ -700,16 +681,15 @@ def aceptar_viaje(viaje_id):
         try:
             conductor_id = int(raw_cid)
         except (TypeError, ValueError):
-            return jsonify({"success": False, "error": "ID de conductor inválido"}), 400
+            return jsonify({"success": False, "error": "ID de repartidor inválido"}), 400
 
     driver, auth_err = get_authenticated_driver(conductor_id)
     if auth_err:
         return auth_err
     conductor_id = driver["id"]
 
-    # Validar que el plan del conductor esté activo y no expirado (CA-7)
     if driver.get("plan_activo") != 1:
-        return jsonify({"success": False, "error": "Acceso denegado: El plan del conductor está inactivo"}), 403
+        return jsonify({"success": False, "error": "Acceso denegado: El plan del repartidor está inactivo"}), 403
 
     plan_exp = driver.get("plan_expira")
     if plan_exp:
@@ -719,13 +699,13 @@ def aceptar_viaje(viaje_id):
                 with get_db() as c_up:
                     c_up.cursor().execute("UPDATE conductores SET plan_activo = 0 WHERE id = ?", (conductor_id,))
                     c_up.commit()
-                return jsonify({"success": False, "error": "Acceso denegado: El plan del conductor ha expirado"}), 403
+                return jsonify({"success": False, "error": "Acceso denegado: El plan del repartidor ha expirado"}), 403
         except Exception:
             pass
     
     with get_db() as conn:
         cursor = conn.cursor()
-        # Asignación ATÓMICA: previene condiciones de carrera si dos conductores aceptan a la vez
+        # Asignación ATÓMICA en base de datos
         cursor.execute("""
             UPDATE viajes 
             SET estado = 'aceptado', conductor_id = ?, updated_at = CURRENT_TIMESTAMP
@@ -734,13 +714,12 @@ def aceptar_viaje(viaje_id):
         conn.commit()
         
         if cursor.rowcount == 0:
-            return jsonify({"success": False, "error": "El viaje ya fue tomado por otro conductor"}), 409
+            return jsonify({"success": False, "error": "El mandado ya fue tomado por otro repartidor"}), 409
 
         cursor.execute("SELECT id, nombre, telefono, unidad FROM conductores WHERE id = ?", (conductor_id,))
         cond_row = cursor.fetchone()
         cond_data = dict(cond_row) if cond_row else {}
 
-    # Notificar al pasajero en tiempo real por SSE
     event_bus.publish("viaje_aceptado", {
         "viaje_id": viaje_id,
         "conductor": cond_data
@@ -748,7 +727,7 @@ def aceptar_viaje(viaje_id):
         
     return jsonify({
         "success": True, 
-        "mensaje": "¡Viaje asignado con éxito! Dirígete al punto de recogida.",
+        "mensaje": "¡Mandado asignado con éxito! Dirígete al punto de recogida.",
         "conductor": cond_data
     })
 
@@ -794,36 +773,36 @@ def registrar_recarga():
     return jsonify({"success": True, "mensaje": "Comprobante registrado. En revisión."})
 
 # =========================================================
-# PANEL DE ADMINISTRACIÓN
+# PANEL DE ADMINISTRACIÓN (MANDADOS_ADMIN_KEY)
 # =========================================================
 ADMIN_HTML = """
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Panel de Control · Caponera App</title>
+  <title>Panel de Control · Mandados App 📦</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d16; color: #fff; padding: 20px; }
     .card { background: #131c2e; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #1e2d4a; }
-    h1, h2 { color: #10b981; }
+    h1, h2 { color: #0284c7; }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { padding: 10px; text-align: left; border-bottom: 1px solid #1e2d4a; font-size: 0.9rem; }
     th { color: #94a3b8; }
     .badge { padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 0.75rem; }
     .badge-success { background: rgba(16,185,129,0.2); color: #10b981; }
     .badge-warning { background: rgba(245,158,11,0.2); color: #f59e0b; }
-    .btn { display: inline-block; padding: 8px 16px; background: #10b981; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600; margin-bottom: 15px; }
+    .btn { display: inline-block; padding: 8px 16px; background: #0284c7; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600; margin-bottom: 15px; }
   </style>
 </head>
 <body>
-  <h1>🛺 Caponera App · Panel de Control</h1>
+  <h1>📦 Mandados App · Panel de Control</h1>
   <a href="/" class="btn">📱 Abrir App en Vivo</a>
   <div class="card">
-    <h2>Conductores Registrados</h2>
+    <h2>Repartidores Registrados</h2>
     <table>
       <thead>
-        <tr><th>ID</th><th>Nombre</th><th>Teléfono</th><th>Unidad</th><th>Driver Token (PIN)</th><th>Plan</th><th>Estado</th></tr>
+        <tr><th>ID</th><th>Nombre</th><th>Teléfono</th><th>Unidad</th><th>Token (PIN)</th><th>Plan</th><th>Estado</th></tr>
       </thead>
       <tbody>
         {% for c in conductores %}
@@ -841,10 +820,10 @@ ADMIN_HTML = """
     </table>
   </div>
   <div class="card">
-    <h2>Últimos Viajes Solicitados</h2>
+    <h2>Últimos Mandados Solicitados</h2>
     <table>
       <thead>
-        <tr><th>ID</th><th>Pasajero</th><th>Origen ➔ Destino</th><th>Tarifa</th><th>Estado</th></tr>
+        <tr><th>ID</th><th>Cliente</th><th>Recogida ➔ Entrega</th><th>Paquete</th><th>Tarifa</th><th>Estado</th></tr>
       </thead>
       <tbody>
         {% for v in viajes %}
@@ -852,6 +831,7 @@ ADMIN_HTML = """
           <td>#{{ v.id }}</td>
           <td>{{ v.pasajero_nombre }}</td>
           <td>{{ v.origen }} ➔ {{ v.destino }}</td>
+          <td>{{ v.paquete_desc or 'General' }}</td>
           <td>C$ {{ v.tarifa }}</td>
           <td><span class="badge badge-warning">{{ v.estado }}</span></td>
         </tr>
@@ -865,7 +845,7 @@ ADMIN_HTML = """
 
 @app.route("/admin")
 def admin_panel():
-    admin_key = os.getenv("CAPONERA_ADMIN_KEY", "").strip()
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "").strip()
     provided_key = (
         request.args.get("key")
         or request.headers.get("X-Admin-Key")
@@ -885,8 +865,9 @@ def admin_panel():
 
 if __name__ == "__main__":
     host_bind = os.getenv("HOST", "0.0.0.0")
+    port_bind = int(os.getenv("PORT", "5058"))
     print("==================================================")
-    print(f"[OK] CAPONERA ENGINE ACTIVO en http://{host_bind}:5054")
-    print("   Tiempo Real (SSE) y API de Despacho Listos")
+    print(f"[OK] MANDADOS ENGINE ACTIVO en http://{host_bind}:{port_bind}")
+    print("   Tiempo Real (SSE) y API de Envíos y Mandados Listos")
     print("==================================================")
-    app.run(host=host_bind, port=5054, debug=False, threaded=True)
+    app.run(host=host_bind, port=port_bind, debug=False, threaded=True)
