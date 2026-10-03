@@ -1,1 +1,1 @@
-1.2.0-registro-casos
+1.2.1-stream-eliminado

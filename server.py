@@ -111,34 +111,6 @@ def purge_expired_trips():
 def before_request_hook():
     purge_expired_trips()
 
-# =========================================================
-# BUS DE EVENTOS EN MEMORIA (SSE - TIEMPO REAL)
-# =========================================================
-class EventBus:
-    def __init__(self):
-        self.listeners: List[queue.Queue] = []
-
-    def subscribe(self) -> queue.Queue:
-        q = queue.Queue(maxsize=100)
-        self.listeners.append(q)
-        return q
-
-    def unsubscribe(self, q: queue.Queue):
-        if q in self.listeners:
-            try:
-                self.listeners.remove(q)
-            except ValueError:
-                pass
-
-    def publish(self, event_type: str, data: dict):
-        payload = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
-        for q in list(self.listeners):
-            try:
-                q.put_nowait(payload)
-            except (queue.Full, Exception):
-                self.unsubscribe(q)
-
-event_bus = EventBus()
 
 # =========================================================
 # BASE DE DATOS Y CONEXIONES (MODO WAL)
@@ -390,29 +362,6 @@ def privacy_page():
 def static_files(filename):
     return send_from_directory(".", filename)
 
-# =========================================================
-# STREAMING SSE EN TIEMPO REAL
-# =========================================================
-@app.route("/api/stream")
-def sse_stream():
-    def event_stream():
-        q = event_bus.subscribe()
-        try:
-            yield "event: ping\ndata: {\"status\":\"connected\"}\n\n"
-            while True:
-                try:
-                    msg = q.get(timeout=25)
-                    yield msg
-                except queue.Empty:
-                    yield "event: ping\ndata: {\"heartbeat\": true}\n\n"
-        except GeneratorExit:
-            event_bus.unsubscribe(q)
-
-    return Response(event_stream(), mimetype="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-        "Connection": "keep-alive"
-    })
 
 # =========================================================
 # RUTAS API: CONFIGURACIÓN Y SERVICIO
@@ -572,13 +521,6 @@ def actualizar_posicion_conductor():
         """, (lat, lng, is_online, conductor_id))
         conn.commit()
 
-    event_bus.publish("conductor_movimiento", {
-        "conductor_id": conductor_id,
-        "lat": lat,
-        "lng": lng,
-        "is_online": is_online
-    })
-        
     return jsonify({"success": True, "mensaje": "Posición actualizada"})
 
 # =========================================================
@@ -632,17 +574,6 @@ def solicitar_viaje():
 
     registrar_evento_bitacora(viaje_id, None, "buscando", actor="solicitante", detalles=f"Mandado solicitado por {pasajero}")
 
-    event_bus.publish("nuevo_viaje", {
-        "viaje_id": viaje_id,
-        "pasajero": pasajero,
-        "origen": origen,
-        "destino": destino,
-        "paquete": paquete,
-        "tarifa": tarifa,
-        "lat": lat_o,
-        "lng": lng_o
-    })
-        
     return jsonify({
         "success": True, 
         "viaje_id": viaje_id,
@@ -745,7 +676,6 @@ def cancelar_viaje(viaje_id=None):
         conn.commit()
 
     registrar_evento_bitacora(viaje_id, prev_estado, "cancelado", actor="solicitante", detalles="Cancelado por emisor con session_token")
-    event_bus.publish("viaje_cancelado", {"viaje_id": viaje_id})
     return jsonify({"success": True, "mensaje": "Mandado cancelado exitosamente"})
 
 @app.route("/api/conductor/viajes_pendientes", methods=["GET"])
@@ -834,11 +764,6 @@ def aceptar_viaje(viaje_id):
 
     registrar_evento_bitacora(viaje_id, "buscando", "aceptado", actor="repartidor", detalles=f"Aceptado por {cond_data.get('nombre', 'Repartidor')} (ID {conductor_id})")
 
-    event_bus.publish("viaje_aceptado", {
-        "viaje_id": viaje_id,
-        "conductor": cond_data
-    })
-        
     return jsonify({
         "success": True, 
         "mensaje": "¡Mandado asignado con éxito! Dirígete al punto de recogida.",
@@ -878,7 +803,6 @@ def cambiar_estado_viaje(viaje_id):
         conn.commit()
 
     registrar_evento_bitacora(viaje_id, estado_ant, nuevo_estado, actor=actor, detalles=f"Transición a {nuevo_estado}")
-    event_bus.publish("viaje_estado_cambiado", {"viaje_id": viaje_id, "estado": nuevo_estado})
     return jsonify({"success": True, "estado": nuevo_estado, "mensaje": f"Estado actualizado a {nuevo_estado}"})
 
 # =========================================================
