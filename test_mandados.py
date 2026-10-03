@@ -235,7 +235,7 @@ def run_all_tests():
     assert res_ver.status_code == 200
     ver_data = res_ver.get_json()
     assert ver_data["app"] == "mandados-app"
-    assert ver_data["version"] == "1.0.0-mandados-r1", f"Esperado 1.0.0-mandados-r1, obtenido {ver_data['version']}"
+    assert ver_data["version"] == "1.0.1-vitrina-tls", f"Esperado 1.0.1-vitrina-tls, obtenido {ver_data['version']}"
 
     res_health = client.get("/health")
     assert res_health.status_code == 200
