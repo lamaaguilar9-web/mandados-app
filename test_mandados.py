@@ -180,7 +180,8 @@ def run_all_tests():
     res_trip_exp = client.post("/api/viajes/crear", json={"origen": "X", "destino": "Y", "tarifa": 40}, environ_base={"REMOTE_ADDR": "192.168.1.155"})
     trip_exp_id = res_trip_exp.get_json()["viaje_id"]
 
-    # Simular repartidor con plan vencido
+    # Simular repartidor con plan vencido (con variable apagada = vence con 403)
+    os.environ.pop("PLAN_GRATIS_LAUNCH", None)
     with server.get_db() as conn:
         cur = conn.cursor()
         cur.execute("UPDATE conductores SET plan_expira = '2020-01-01', plan_activo = 1 WHERE id = 1")
@@ -191,12 +192,22 @@ def run_all_tests():
                                      json={"conductor_id": 1})
     assert res_accept_expired.status_code == 403, f"Esperado 403 por plan expirado, obtenido {res_accept_expired.status_code}"
 
-    # Restaurar repartidor 1 a fecha futura
+    # Con PLAN_GRATIS_LAUNCH=1, no se desactiva y se permite operar
+    os.environ["PLAN_GRATIS_LAUNCH"] = "1"
+    res_trip_launch = client.post("/api/viajes/crear", json={"origen": "X2", "destino": "Y2", "tarifa": 40}, environ_base={"REMOTE_ADDR": "192.168.1.156"})
+    trip_launch_id = res_trip_launch.get_json()["viaje_id"]
+    res_accept_launch = client.post(f"/api/viajes/{trip_launch_id}/aceptar",
+                                    headers={"X-Driver-Token": driver1_token},
+                                    json={"conductor_id": 1})
+    assert res_accept_launch.status_code == 200, f"Esperado 200 con PLAN_GRATIS_LAUNCH=1, obtenido {res_accept_launch.status_code}"
+
+    # Restaurar repartidor 1 a fecha futura y resetear variable
+    os.environ.pop("PLAN_GRATIS_LAUNCH", None)
     with server.get_db() as conn:
         cur = conn.cursor()
         cur.execute("UPDATE conductores SET plan_expira = '2099-12-31', plan_activo = 1 WHERE id = 1")
         conn.commit()
-    print("  -> PASÓ: Repartidores con plan vencido no pueden aceptar mandados (403).")
+    print("  -> PASÓ: Control de vencimiento y bypass con PLAN_GRATIS_LAUNCH=1 verificado.")
 
     # ---------------------------------------------------------
     # MA-8: sw.js funcional y PWA
@@ -235,7 +246,7 @@ def run_all_tests():
     assert res_ver.status_code == 200
     ver_data = res_ver.get_json()
     assert ver_data["app"] == "mandados-app"
-    assert ver_data["version"] == "1.2.1-stream-eliminado", f"Esperado 1.2.1-stream-eliminado, obtenido {ver_data['version']}"
+    assert ver_data["version"] == "1.3.0-lanzamiento-gratis", f"Esperado 1.3.0-lanzamiento-gratis, obtenido {ver_data['version']}"
 
     res_health = client.get("/health")
     assert res_health.status_code == 200
@@ -298,7 +309,28 @@ def run_all_tests():
         "reglas_aceptadas": True
     })
     assert r_reg_dup.status_code == 409, f"Esperado 409 por duplicado, obtenido {r_reg_dup.status_code}"
-    print("  -> PASÓ: Registro valida cédula/teléfono/reglas, emite token secreto y previene duplicados (201/409).")
+
+    # 7. Registro con PLAN_GRATIS_LAUNCH=1 -> plan 'Lanzamiento (Gratis)' (+365 días)
+    server.registro_rate_limiter.requests.clear()
+    test_phone_launch = f"50586{secrets.randbelow(899999) + 100000}"
+    test_cedula_launch = f"001-{secrets.randbelow(899999) + 100000:06d}-0005Y"
+    os.environ["PLAN_GRATIS_LAUNCH"] = "1"
+    r_reg_launch = client.post("/api/conductor/registro", json={
+        "nombre": "Conductor Lanzamiento",
+        "cedula": test_cedula_launch,
+        "telefono": test_phone_launch,
+        "placa": "MY-7766",
+        "reglas_aceptadas": True
+    })
+    assert r_reg_launch.status_code == 201
+    launch_cond_id = r_reg_launch.get_json()["conductor_id"]
+    with server.get_db() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT plan_nombre, plan_expira FROM conductores WHERE id = ?", (launch_cond_id,))
+        cond_row = cur.fetchone()
+        assert cond_row["plan_nombre"] == "Lanzamiento (Gratis)"
+    os.environ.pop("PLAN_GRATIS_LAUNCH", None)
+    print("  -> PASÓ: Registro valida cédula/teléfono/reglas, emite token secreto, asigna plan Lanzamiento si aplica y previene duplicados (201/409).")
 
     # ---------------------------------------------------------
     # M7-2: Suspensión Inmediata por Operador (Corte Inmediato 403)
