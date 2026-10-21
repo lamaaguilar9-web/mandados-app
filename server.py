@@ -388,9 +388,80 @@ def static_files(filename):
 # =========================================================
 # RUTAS API: CONFIGURACIÓN Y SERVICIO
 # =========================================================
+
+CIUDADES_NIC_COORDS = {
+    "Managua": [12.1149, -86.2362],
+    "Masaya": [12.1364, -86.2514],
+    "Granada": [11.9299, -85.9560],
+    "Leon": [12.4379, -86.8780],
+    "Chinandega": [12.6294, -87.1311],
+    "Esteli": [13.0926, -86.3528],
+    "Matagalpa": [12.9290, -85.9168],
+    "Jinotega": [13.0917, -86.0035],
+    "Rivas": [11.4372, -85.8250],
+    "Jinotepe": [11.8496, -86.1990],
+    "Boaco": [12.4722, -85.6576],
+    "Bluefields": [12.0137, -83.7635],
+}
+
+@app.route("/api/anuncios", methods=["GET"])
+def get_anuncios():
+    ciudad = (request.args.get("ciudad") or os.getenv("CAPONERA_CIUDAD", "Masaya")).strip()
+    if ciudad not in CIUDADES_NIC_COORDS:
+        ciudad = "Masaya"
+    anuncios = [
+        {
+            "id": "vip-polarizados",
+            "titulo": "Polarizados & Focos Pro",
+            "subtitulo": f"Servicio Especializado Automotriz • Cobertura {ciudad}",
+            "badge": "GARANTÍA TOTAL",
+            "vip": True,
+            "descripcion": "🚗 Polarizado de Autos: Máxima protección solar UV, privacidad y reducción de calor. 💡 Restauración de Focos con Polímero a Vapor: focos 100% cristalinos como nuevos.",
+            "cta_texto": "Cotizar por WhatsApp",
+            "cta_url": "https://wa.me/50589130414?text=Hola%20Luis,%20vi%20tu%20anuncio%20en%20la%20App.%20Quiero%20cotizar%20polarizado%20y%20restauraci%C3%B3n%20de%20focos."
+        },
+        {
+            "id": "pauta-negocio",
+            "titulo": f"¿Tienes un negocio o comercio en {ciudad}?",
+            "subtitulo": "Anúnciate en la red nacional desde C$ 150/mes",
+            "badge": "ESPACIO DISPONIBLE",
+            "vip": False,
+            "descripcion": f"Llega a pasajeros y conductores activos todos los días en {ciudad}. Promociona tu comedor, farmacia o taller directamente en la app.",
+            "cta_texto": "Pautar mi Negocio",
+            "cta_url": "https://wa.me/50589130414?text=Hola%20Luis,%20quiero%20anunciar%20mi%20negocio%20en%20la%20App%20por%20C$%20150"
+        }
+    ]
+    return jsonify({"success": True, "ciudad": ciudad, "anuncios": anuncios})
+
+@app.route("/api/conductor/stats", methods=["GET"])
+def get_conductor_stats():
+    conductor_id = request.args.get("conductor_id", type=int)
+    hoy = datetime.date.today().strftime("%Y-%m-%d")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if conductor_id:
+            cursor.execute(
+                "SELECT COUNT(*) as total_viajes, COALESCE(SUM(tarifa), 0) as ganado FROM viajes WHERE conductor_id = ? AND estado IN ('aceptado', 'en_camino', 'completado', 'entregado') AND substr(created_at, 1, 10) = ?",
+                (conductor_id, hoy)
+            )
+        else:
+            cursor.execute(
+                "SELECT COUNT(*) as total_viajes, COALESCE(SUM(tarifa), 0) as ganado FROM viajes WHERE estado IN ('aceptado', 'en_camino', 'completado', 'entregado') AND substr(created_at, 1, 10) = ?",
+                (hoy,)
+            )
+        row = cursor.fetchone()
+    return jsonify({
+        "success": True,
+        "ganado_hoy": float(row["ganado"] if row else 0),
+        "viajes_hoy": int(row["total_viajes"] if row else 0)
+    })
+
 @app.route("/api/config", methods=["GET"])
 def get_config():
-    ciudad = os.getenv("MANDADOS_CIUDAD", "Masaya")
+    ciudad = (request.args.get("ciudad") or os.getenv("MANDADOS_CIUDAD", "Masaya")).strip()
+    if ciudad not in CIUDADES_NIC_COORDS:
+        ciudad = "Masaya"
+    coords = CIUDADES_NIC_COORDS.get(ciudad, [12.1364, -86.2514])
     try:
         tarifa_min = float(os.getenv("MANDADOS_TARIFA_MIN", "20.0"))
     except ValueError:
@@ -416,7 +487,9 @@ def get_config():
         "ciudad": ciudad,
         "tarifa_min": tarifa_min,
         "tarifa_max": tarifa_max,
-        "zonas": zonas
+        "zonas": zonas,
+        "coords": coords,
+        "ciudades": CIUDADES_NIC_COORDS
     })
 
 # =========================================================
@@ -740,7 +813,7 @@ def get_viajes_pendientes():
             
     if request.path == "/api/conductor/viajes-pendientes":
         return jsonify(carreras)
-    return jsonify({"success": True, "viajes": carreras})
+    return jsonify({"success": True, "viajes": carreras, "carreras": carreras})
 
 @app.route("/api/viajes/<int:viaje_id>/aceptar", methods=["POST"])
 def aceptar_viaje(viaje_id):
