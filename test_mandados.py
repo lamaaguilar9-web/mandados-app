@@ -229,9 +229,21 @@ def run_all_tests():
     assert cfg["tarifa_min"] == 20.0
     assert cfg["tarifa_max"] == 300.0
 
+    # Tarifa 15 rechazada (piso 20) -> 400
+    res_low15 = client.post("/api/viajes/crear", json={"tarifa": 15.0}, environ_base={"REMOTE_ADDR": "192.168.1.184"})
+    assert res_low15.status_code == 400, f"Esperado 400 por tarifa 15, obtenido {res_low15.status_code}"
+
     # Tarifa menor al mínimo (C$ 10 < 20) -> 400
     res_low = client.post("/api/viajes/crear", json={"tarifa": 10.0}, environ_base={"REMOTE_ADDR": "192.168.1.185"})
     assert res_low.status_code == 400, f"Esperado 400 por tarifa baja, obtenido {res_low.status_code}"
+
+    # Tarifa 20 aceptada (piso exacto) -> 201
+    res_20 = client.post("/api/viajes/crear", json={"tarifa": 20.0, "cliente_telefono": "88886666", "origen_texto": "Pali", "destino_texto": "Casa", "paquete_descripcion": "Compra"}, environ_base={"REMOTE_ADDR": "192.168.1.187"})
+    assert res_20.status_code == 200, f"Esperado 201 por tarifa 20, obtenido {res_20.status_code}"
+
+    # Tarifa 25 aceptada (el 5 manual) -> 201
+    res_25 = client.post("/api/viajes/crear", json={"tarifa": 25.0, "cliente_telefono": "88886666", "origen_texto": "Farmacia", "destino_texto": "Barrio", "paquete_descripcion": "Medicina"}, environ_base={"REMOTE_ADDR": "192.168.1.188"})
+    assert res_25.status_code == 200, f"Esperado 201 por tarifa 25, obtenido {res_25.status_code}"
 
     # Tarifa mayor al máximo (C$ 350 > 300) -> 400
     res_high = client.post("/api/viajes/crear", json={"tarifa": 350.0}, environ_base={"REMOTE_ADDR": "192.168.1.186"})
