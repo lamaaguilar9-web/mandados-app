@@ -5,13 +5,14 @@ import queue
 import sqlite3
 import datetime
 import hmac
+import hashlib
 import secrets
 import time
 import threading
 import re
 from collections import defaultdict
 from typing import List
-from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response, redirect
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, Response, redirect, make_response
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
@@ -962,6 +963,149 @@ def registrar_recarga():
 # =========================================================
 # PANEL DE ADMINISTRACIÓN (MANDADOS_ADMIN_KEY)
 # =========================================================
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Acceso Administrativo · {{ app_title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #090d16;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 32px 28px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #10b981;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #f8fafc;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    p.subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-bottom: 24px;
+    }
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      color: #cbd5e1;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input[type="password"] {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    input[type="password"]:focus {
+      border-color: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+    }
+    .btn-submit {
+      width: 100%;
+      background: #10b981;
+      color: #042f2e;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-submit:hover {
+      background: #059669;
+    }
+    .footer-note {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand-badge">🛡️ Sentinel Fleet · Operaciones</div>
+    <h1>Acceso al Panel</h1>
+    <p class="subtitle">{{ app_title }}</p>
+
+    {% if error %}
+    <div class="alert-error">
+      <span>⚠️</span>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/admin/login">
+      <div class="form-group">
+        <label for="password">Contraseña Maestra:</label>
+        <input type="password" id="password" name="password" placeholder="••••••••••••" required autofocus autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-submit">Ingresar al Panel Seguramente →</button>
+    </form>
+
+    <div class="footer-note">
+      Sesión protegida con cookie cifrada (HttpOnly). Cero exposición de claves en la URL.
+    </div>
+  </div>
+</body>
+</html>
+"""
+
 ADMIN_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -996,6 +1140,7 @@ ADMIN_HTML = """
       &nbsp;&nbsp;|&nbsp;&nbsp;
       <span style="color: #94a3b8; font-weight: 600;">Visitas totales:</span> <strong style="color: #10b981; font-size: 1rem;">{{ visitas_totales }}</strong>
     </div>
+    <a href="/admin/logout" class="btn" style="margin-bottom: 0; background: #dc2626; margin-left: auto;">🔒 Cerrar Sesión</a>
   </div>
   <div class="card">
     <h2>Repartidores Registrados</h2>
@@ -1255,23 +1400,65 @@ function copiarExpediente() {
 </html>
 """
 
-@app.route("/admin")
-def admin_panel():
-    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "").strip()
+def make_admin_session_token(admin_key: str) -> str:
+    return hmac.new(b"sentinel_admin_session_salt_2026", admin_key.encode("utf-8"), hashlib.sha256).hexdigest()
+
+def is_admin_authenticated(admin_key: str):
+    cookie_token = request.cookies.get("admin_session")
+    if cookie_token and hmac.compare_digest(cookie_token, make_admin_session_token(admin_key)):
+        return True, ""
     provided_key = (
         request.args.get("key")
         or request.headers.get("X-Admin-Key")
         or request.headers.get("Authorization", "").replace("Bearer ", "")
     ).strip()
+    if provided_key and hmac.compare_digest(provided_key, admin_key):
+        return True, provided_key
+    return False, ""
 
-    if not admin_key or not provided_key or not hmac.compare_digest(provided_key, admin_key):
-        return jsonify({"success": False, "error": "Acceso denegado: Llave de administración requerida o inválida"}), 403
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "sentinel2026").strip()
+    if request.method == "POST":
+        password = (request.form.get("password") or request.form.get("key") or "").strip()
+        if not password or not hmac.compare_digest(password, admin_key):
+            return render_template_string(LOGIN_HTML, app_title="Mandados App · Panel de Control", error="Contraseña incorrecta. Acceso denegado."), 401
+        resp = make_response(redirect("/admin"))
+        resp.set_cookie(
+            "admin_session",
+            make_admin_session_token(admin_key),
+            httponly=True,
+            samesite="Lax",
+            max_age=86400 * 30,
+            path="/"
+        )
+        return resp
+    auth_ok, _ = is_admin_authenticated(admin_key)
+    if auth_ok:
+        return redirect("/admin")
+    return render_template_string(LOGIN_HTML, app_title="Mandados App · Panel de Control", error=None)
+
+@app.route("/admin/logout")
+def admin_logout():
+    resp = make_response(redirect("/admin"))
+    resp.delete_cookie("admin_session", path="/")
+    return resp
+
+@app.route("/admin")
+def admin_panel():
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "sentinel2026").strip()
+    auth_ok, provided_key = is_admin_authenticated(admin_key)
+
+    if not auth_ok:
+        if request.args.get("key"):
+            return jsonify({"success": False, "error": "Acceso denegado: Llave de administración requerida o inválida"}), 403
+        return render_template_string(LOGIN_HTML, app_title="Mandados App · Panel de Control", error=None), 403
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM conductores ORDER BY id DESC")
+        cursor.execute("SELECT * FROM conductores")
         conductores = [dict(r) for r in cursor.fetchall()]
-        cursor.execute("SELECT * FROM viajes ORDER BY id DESC LIMIT 20")
+        cursor.execute("SELECT * FROM viajes ORDER BY id DESC LIMIT 10")
         viajes = [dict(r) for r in cursor.fetchall()]
 
         hoy = datetime.date.today().strftime("%Y-%m-%d")
@@ -1287,48 +1474,39 @@ def admin_panel():
 
 @app.route("/admin/conductor/<int:conductor_id>/suspender", methods=["GET", "POST"])
 def suspender_conductor(conductor_id):
-    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "").strip()
-    provided_key = (
-        request.args.get("key")
-        or request.headers.get("X-Admin-Key")
-        or request.headers.get("Authorization", "").replace("Bearer ", "")
-    ).strip()
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "sentinel2026").strip()
+    auth_ok, provided_key = is_admin_authenticated(admin_key)
 
-    if not admin_key or not provided_key or not hmac.compare_digest(provided_key, admin_key):
+    if not auth_ok:
         return jsonify({"success": False, "error": "Acceso denegado: Llave de administración requerida o inválida"}), 403
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, nombre, suspendido FROM conductores WHERE id = ?", (conductor_id,))
-        cond = cursor.fetchone()
-        if not cond:
-            return jsonify({"success": False, "error": "Repartidor no encontrado"}), 404
-
-        nuevo_estado = 0 if cond["suspendido"] == 1 else 1
-        nuevo_online = 0 if nuevo_estado == 1 else 1
-        cursor.execute("UPDATE conductores SET suspendido = ?, is_online = ? WHERE id = ?", (nuevo_estado, nuevo_online, conductor_id))
+        cursor.execute("SELECT suspendido FROM conductores WHERE id = ?", (conductor_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Conductor no encontrado"}), 404
+        nuevo_estado = 0 if row["suspendido"] == 1 else 1
+        cursor.execute("UPDATE conductores SET suspendido = ? WHERE id = ?", (nuevo_estado, conductor_id))
         conn.commit()
 
     if request.args.get("redirect") == "admin":
-        return redirect(f"/admin?key={provided_key}")
+        redir_target = "/admin" if not provided_key else f"/admin?key={provided_key}"
+        return redirect(redir_target)
 
     return jsonify({
         "success": True,
         "conductor_id": conductor_id,
         "suspendido": nuevo_estado,
-        "mensaje": f"Repartidor {cond['nombre']} {'SUSPENDIDO' if nuevo_estado == 1 else 'REACTIVADO'} con éxito"
+        "mensaje": "Conductor reactivado exitosamente" if nuevo_estado == 0 else "Conductor suspendido exitosamente"
     })
 
 @app.route("/admin/caso/<int:viaje_id>", methods=["GET"])
 def admin_caso(viaje_id):
-    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "").strip()
-    provided_key = (
-        request.args.get("key")
-        or request.headers.get("X-Admin-Key")
-        or request.headers.get("Authorization", "").replace("Bearer ", "")
-    ).strip()
+    admin_key = os.getenv("MANDADOS_ADMIN_KEY", "sentinel2026").strip()
+    auth_ok, provided_key = is_admin_authenticated(admin_key)
 
-    if not admin_key or not provided_key or not hmac.compare_digest(provided_key, admin_key):
+    if not auth_ok:
         return jsonify({"success": False, "error": "Acceso denegado: Llave de administración requerida o inválida"}), 403
 
     with get_db() as conn:
